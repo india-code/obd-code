@@ -25,12 +25,38 @@ typedef struct {
 	int   lineState;
 	int InUse;
 	char DtmfBuf[251];
+	CDR_STATUS CDRStatus;
 	// user channel  vars
 	APP_USER_STATE	nStep;
 	int				nToTrkCh;
 	char			pPhoNumBuf[31];
 	int				nTimeOut;
 }CH_INFO;
+
+typedef struct
+{
+	char call_id[20];
+	char channel[30];
+	char groupid[30];
+	char campaign_id[50];
+	char circle[20];
+	char call_date[20];
+	char ani[20];
+	char cli[20];
+	char call_time[20];
+	char answer_time[20];
+	char end_time[20];
+	char ring_duration[20];
+	char answer_duration[20];
+	char total_duration[20];
+	char reason_code[20];
+	char reason[100];
+	char context[30];
+	char encrypted_ani[100];
+	char dtmf[50];
+	char retry_status[11];
+	char status[11];
+} CDR_STATUS;
 
 // CSpiceOBDDlg dialog
 class CSpiceOBDDlg : public CDialogEx
