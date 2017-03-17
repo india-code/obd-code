@@ -19,20 +19,6 @@ enum APP_USER_STATE {
 	USER_WAIT_HANGUP
 };
 
-typedef struct {
-	// trunck channel vars
-	bool  EnCalled;
-	int   lineState;
-	int InUse;
-	char DtmfBuf[251];
-	CDR_STATUS CDRStatus;
-	// user channel  vars
-	APP_USER_STATE	nStep;
-	int				nToTrkCh;
-	char			pPhoNumBuf[31];
-	int				nTimeOut;
-}CH_INFO;
-
 typedef struct
 {
 	char call_id[20];
@@ -57,6 +43,21 @@ typedef struct
 	char retry_status[11];
 	char status[11];
 } CDR_STATUS;
+
+typedef struct {
+	// trunck channel vars
+	bool  EnCalled;
+	int   lineState;
+	int InUse;
+	char DtmfBuf[251];
+	CDR_STATUS CDRStatus;
+	// user channel  vars
+	APP_USER_STATE	nStep;
+	int				nToTrkCh;
+	char			pPhoNumBuf[31];
+	int				nTimeOut;
+}CH_INFO;
+
 
 // CSpiceOBDDlg dialog
 class CSpiceOBDDlg : public CDialogEx

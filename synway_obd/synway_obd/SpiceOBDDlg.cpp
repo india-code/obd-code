@@ -562,12 +562,12 @@ void CSpiceOBDDlg::DoUserWork()
 					ChInfo[i].nStep = USER_WAIT_HANGUP;
 				}
 			}
-			else if (SsmGetHookState(i) == 0 || (ChInfo[i].lineState == DIAL_NOANSWER) ||
+			else if (SsmGetHookState(i) == 0 || (ChInfo[i].lineState == DIAL_NOANSWER) || (SsmGetChState(i) == S_CALL_PENDING) ||
 				(ChInfo[i].lineState == DIAL_BUSYTONE) || (ChInfo[i].lineState == DIAL_FAILURE))		//Either user hangup or 30s timeout or any such reason
 			{
 				SsmHangup(i);
 				SsmClearRxDtmfBuf(i);
-				ChInfo[i].nStep = USER_IDLE;
+				ChInfo[i].nStep = USER_WAIT_HANGUP;
 			}
 			break;
 
@@ -579,9 +579,10 @@ void CSpiceOBDDlg::DoUserWork()
 				{
 					/*if (!StrCmpA(ChInfo[i].DtmfBuf, "1"))
 					{*/
-					//TODO
-					logger.log(LOGINFO, "DTMF recived: %s", ChInfo[i].DtmfBuf);
-					SsmStopPlayIndex(i);
+						//TODO
+						logger.log(LOGINFO, "DTMF recived: %s", ChInfo[i].DtmfBuf);
+					//}
+					//SsmStopPlayIndex(i);
 					//}
 				}
 			}
@@ -589,15 +590,20 @@ void CSpiceOBDDlg::DoUserWork()
 			{
 				SsmHangup(i);
 				SsmClearRxDtmfBuf(i);
-				ChInfo[i].nStep = USER_IDLE;
+				ChInfo[i].nStep = USER_WAIT_HANGUP;
 			}
 			break;
 		case USER_WAIT_HANGUP:
-			if (SsmCheckPlay(i) >= 1 || SsmGetChState(i) == S_CALL_PENDING || SsmGetHookState(i) == 0)		//remote user hung up or user hung up
+			ChInfo[i].lineState = SsmGetChState(i);
+			if (SsmCheckPlay(i) >= 1 || ChInfo[i].lineState == S_CALL_PENDING 
+				|| ChInfo[i].lineState == 0 || SsmGetHookState(i) == 0)		//remote user hung up or user hung up
 			{
 				SsmHangup(i);
 				//SsmStopSendTone(i);					//stop sending busy tone
 				SsmClearRxDtmfBuf(i);
+				sprintf_s(ChInfo[i].CDRStatus.reason_code, "%d", SsmGetLastErrCode());
+				SsmGetLastErrMsg(ChInfo[i].CDRStatus.reason);
+				logger.log(LOGERR, "Error code: %s And Erroe Reason: %s", ChInfo[i].CDRStatus.reason_code, ChInfo[i].CDRStatus.reason);
 				ChInfo[i].nStep = USER_IDLE;
 				IsUpdate = true;
 			}
@@ -720,12 +726,12 @@ bool CSpiceOBDDlg::SetCLIOnChannels()
 	if (ChInfo[i].nStep == USER_IDLE)
 	{
 		//setting caller ID 
-		if (SsmSetTxOriginalCallerID(i, reinterpret_cast<byte*>("1400850667")) == -1) //
+		if (SsmSetTxOriginalCallerID(i, reinterpret_cast<byte*>("8699311529")) == -1) //
 		{
 			getErrorResult(L" SsmSetTxOriginalCallerID");
 			return false;
 		}
-		GetPrivateProfileStringA("Database", "phoneNumber1", "9718050375", ChInfo[i].pPhoNumBuf, 31, "\\DBSettings.INI");
+		GetPrivateProfileStringA("Database", "phoneNumber1", "9582242675", ChInfo[i].pPhoNumBuf, 31, "\\DBSettings.INI");
 		//i++;
 
 
