@@ -1,26 +1,26 @@
 
-// synway_obd.cpp : Defines the class behaviors for the application.
+// SpiceOBD.cpp : Defines the class behaviors for the application.
 //
 
 #include "stdafx.h"
-#include "synway_obd.h"
-#include "synway_obdDlg.h"
+#include "SpiceOBD.h"
+#include "SpiceOBDDlg.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
 
-// Csynway_obdApp
+// CSpiceOBDApp
 
-BEGIN_MESSAGE_MAP(Csynway_obdApp, CWinApp)
+BEGIN_MESSAGE_MAP(CSpiceOBDApp, CWinApp)
 	ON_COMMAND(ID_HELP, &CWinApp::OnHelp)
 END_MESSAGE_MAP()
 
 
-// Csynway_obdApp construction
+// CSpiceOBDApp construction
 
-Csynway_obdApp::Csynway_obdApp()
+CSpiceOBDApp::CSpiceOBDApp()
 {
 	// support Restart Manager
 	m_dwRestartManagerSupportFlags = AFX_RESTART_MANAGER_SUPPORT_RESTART;
@@ -30,14 +30,14 @@ Csynway_obdApp::Csynway_obdApp()
 }
 
 
-// The one and only Csynway_obdApp object
+// The one and only CSpiceOBDApp object
 
-Csynway_obdApp theApp;
+CSpiceOBDApp theApp;
 
 
-// Csynway_obdApp initialization
+// CSpiceOBDApp initialization
 
-BOOL Csynway_obdApp::InitInstance()
+BOOL CSpiceOBDApp::InitInstance()
 {
 	// InitCommonControlsEx() is required on Windows XP if an application
 	// manifest specifies use of ComCtl32.dll version 6 or later to enable
@@ -70,7 +70,7 @@ BOOL Csynway_obdApp::InitInstance()
 	// such as the name of your company or organization
 	SetRegistryKey(_T("Local AppWizard-Generated Applications"));
 
-	Csynway_obdDlg dlg;
+	CSpiceOBDDlg dlg;
 	m_pMainWnd = &dlg;
 	INT_PTR nResponse = dlg.DoModal();
 	if (nResponse == IDOK)
