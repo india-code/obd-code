@@ -528,11 +528,19 @@ void getErrorResult(LPCTSTR  ApiName)
 	PostQuitMessage(0);
 }
 
+void CSpiceOBDDlg::LogErrorCodeAndMessage(int ch)
+{
+	sprintf_s(ChInfo[ch].CDRStatus.reason_code, "%d", SsmGetLastErrCode()); //get eoor code
+	SsmGetLastErrMsg(ChInfo[ch].CDRStatus.reason); //get dil failure error message
+	logger.log(LOGERR, "Error code: %s And Error Reason: %s", ChInfo[ch].CDRStatus.reason_code, ChInfo[ch].CDRStatus.reason);
+}
+
 void CSpiceOBDDlg::DoUserWork()
 {
 	int i = 0;
-	for (int i = 0; i < 1 /*nTotalCh*/; i++)
+	for (int i = 0; i < 2 /*nTotalCh*/; i++)
 	{
+		//logger.log(LOGINFO, "\nChannel [%d] state event got as %d", i, SsmGetChState(i));
 		if (SsmGetChType(i) != 11) continue;
 
 		switch (ChInfo[i].nStep)
@@ -547,8 +555,9 @@ void CSpiceOBDDlg::DoUserWork()
 				}
 				else
 				{
+					LogErrorCodeAndMessage(i);
 					SsmHangup(i);
-					ChInfo[i].nStep = USER_WAIT_HANGUP;
+					ChInfo[i].nStep = USER_IDLE;
 				}
 			}
 			break;
@@ -556,58 +565,107 @@ void CSpiceOBDDlg::DoUserWork()
 			ChInfo[i].lineState = SsmChkAutoDial(i);
 			if (ChInfo[i].lineState == DIAL_VOICE)
 			{
-				ChInfo[i].nStep = USER_TALKING;
 				if (SsmPlayIndexString(i, "1") == -1)
 				{
-					ChInfo[i].nStep = USER_WAIT_HANGUP;
+					LogErrorCodeAndMessage(i);
+					SsmHangup(i);
+					ChInfo[i].nStep = USER_IDLE;
+				}
+				else
+				{
+					logger.log(LOGINFO,"DTMF First SetTimeout for channel %d", i);
+					SsmSetWaitDtmfExA(i, 30000, 2, "123", true); //set the DTMF termination character
+					ChInfo[i].nStep = USER_TALKING;
+					ChInfo[i].mediaState = 0;
 				}
 			}
-			else if (SsmGetHookState(i) == 0 || (ChInfo[i].lineState == DIAL_NOANSWER) || (SsmGetChState(i) == S_CALL_PENDING) ||
-				(ChInfo[i].lineState == DIAL_BUSYTONE) || (ChInfo[i].lineState == DIAL_FAILURE))		//Either user hangup or 30s timeout or any such reason
+			else if (SsmGetHookState(i) == 0 || (ChInfo[i].lineState == DIAL_NOANSWER) || 
+				(SsmGetChState(i) == S_CALL_PENDING) || (ChInfo[i].lineState == DIAL_BUSYTONE))		//Either user hangup or 30s timeout or any such reason
 			{
+				LogErrorCodeAndMessage(i);
 				SsmHangup(i);
 				SsmClearRxDtmfBuf(i);
-				ChInfo[i].nStep = USER_WAIT_HANGUP;
+				ChInfo[i].nStep = USER_IDLE;
+			}
+			else if (ChInfo[i].lineState == DIAL_FAILURE)
+			{
+				int errorCode = SsmGetAutoDialFailureReason(i);
+				sprintf_s(ChInfo[i].CDRStatus.reason_code, "%d", errorCode);
+				sprintf_s(ChInfo[i].CDRStatus.reason, "AutoDial failed... Error Code# %d", errorCode);
+				SsmClearRxDtmfBuf(i);
+				SsmHangup(i);
+				ChInfo[i].nStep = USER_IDLE;
+			}
+			break;
+		case USER_TALKING:
+			switch (ChInfo[i].mediaState)
+			{
+			case 0:
+				ChInfo[i].DtmfState = SsmChkWaitDtmf(i, ChInfo[i].DtmfBuf);
+				if (ChInfo[i].DtmfState >= 1 && ChInfo[i].DtmfState <= 3)
+				{
+					SsmStopPlayIndex(i);
+					SsmClearRxDtmfBuf(i);
+					logger.log(LOGINFO, "DTMF Recieved First round: %s on channel: %d", ChInfo[i].DtmfBuf, i);
+					if (ChInfo[i].DtmfBuf[0] == '1')
+					{
+						SsmPlayIndexString(i, "2");
+						SsmSetWaitDtmf(i, 30, 2, '2', true);
+						ChInfo[i].mediaState = 1;
+					}
+					if (ChInfo[i].DtmfBuf[0] == '2')
+					{
+						SsmPlayIndexString(i, "3");
+						SsmSetWaitDtmf(i, 30, 2, '2', true);
+						ChInfo[i].mediaState = 1;
+					}
+					else if (ChInfo[i].DtmfBuf[0] == '3')
+					{
+						SsmHangup(i);
+						ChInfo[i].mediaState = 0;
+						ChInfo[i].nStep = USER_IDLE;
+					}
+				}
+				if (SsmCheckPlay(i) == 0 || ChInfo[i].DtmfState == 0)
+				{
+					continue;
+				}
+				else if (SsmGetChState(i) == S_CALL_PENDING || SsmGetHookState(i) == 0) //remote/user hangup
+				{
+					LogErrorCodeAndMessage(i);
+					SsmClearRxDtmfBuf(i);
+					SsmHangup(i);
+					ChInfo[i].nStep = USER_IDLE;
+				}
+				break;
+			case 1:
+				if (SsmChkWaitDtmf(i, ChInfo[i].DtmfBuf) >= 1 && SsmChkWaitDtmf(i, ChInfo[i].DtmfBuf) <= 3)
+				{
+					logger.log(LOGINFO, "DTMF Recieved Second round: %s on channel: %d", ChInfo[i].DtmfBuf, i);
+					SsmClearRxDtmfBuf(i);
+					SsmHangup(i);
+					ChInfo[i].mediaState = 0;
+					ChInfo[i].nStep = USER_IDLE;
+				}
+				break;
 			}
 			break;
 
-		case USER_TALKING:
-			if (SsmCheckPlay(i) == 0)
-			{
-				logger.log(LOGINFO, "SsmGetDtmfStr called on %s", ChInfo[i].pPhoNumBuf);
-				if (SsmGetDtmfStr(i, ChInfo[i].DtmfBuf) >= 0)
-				{
-					/*if (!StrCmpA(ChInfo[i].DtmfBuf, "1"))
-					{*/
-						//TODO
-						logger.log(LOGINFO, "DTMF recived: %s", ChInfo[i].DtmfBuf);
-					//}
-					//SsmStopPlayIndex(i);
-					//}
-				}
-			}
-			else
-			{
-				SsmHangup(i);
-				SsmClearRxDtmfBuf(i);
-				ChInfo[i].nStep = USER_WAIT_HANGUP;
-			}
-			break;
-		case USER_WAIT_HANGUP:
-			ChInfo[i].lineState = SsmGetChState(i);
-			if (SsmCheckPlay(i) >= 1 || ChInfo[i].lineState == S_CALL_PENDING 
-				|| ChInfo[i].lineState == 0 || SsmGetHookState(i) == 0)		//remote user hung up or user hung up
-			{
-				SsmHangup(i);
-				//SsmStopSendTone(i);					//stop sending busy tone
-				SsmClearRxDtmfBuf(i);
-				sprintf_s(ChInfo[i].CDRStatus.reason_code, "%d", SsmGetLastErrCode());
-				SsmGetLastErrMsg(ChInfo[i].CDRStatus.reason);
-				logger.log(LOGERR, "Error code: %s And Erroe Reason: %s", ChInfo[i].CDRStatus.reason_code, ChInfo[i].CDRStatus.reason);
-				ChInfo[i].nStep = USER_IDLE;
-				IsUpdate = true;
-			}
-			break;
+		//case USER_WAIT_HANGUP:
+		//	ChInfo[i].lineState = SsmGetChState(i);
+		//	if (SsmCheckPlay(i) >= 1 || ChInfo[i].lineState == S_CALL_PENDING 
+		//		|| ChInfo[i].lineState == 0 || SsmGetHookState(i) == 0)		//remote user hung up or user hung up
+		//	{
+		//		SsmHangup(i);
+		//		//SsmStopSendTone(i);					//stop sending busy tone
+		//		SsmClearRxDtmfBuf(i);
+		//		sprintf_s(ChInfo[i].CDRStatus.reason_code, "%d", SsmGetLastErrCode());
+		//		SsmGetLastErrMsg(ChInfo[i].CDRStatus.reason);
+		//		logger.log(LOGERR, "Error code: %s And Erroe Reason: %s", ChInfo[i].CDRStatus.reason_code, ChInfo[i].CDRStatus.reason);
+		//		ChInfo[i].nStep = USER_IDLE;
+		//		IsUpdate = true;
+		//	}
+		//	break;
 		default:
 			ChInfo[i].nStep = USER_IDLE;
 			break;
@@ -726,21 +784,21 @@ bool CSpiceOBDDlg::SetCLIOnChannels()
 	if (ChInfo[i].nStep == USER_IDLE)
 	{
 		//setting caller ID 
-		if (SsmSetTxOriginalCallerID(i, reinterpret_cast<byte*>("8699311529")) == -1) //
+		if (SsmSetTxOriginalCallerID(i, reinterpret_cast<byte*>("1401870901")) == -1) //
 		{
 			getErrorResult(L" SsmSetTxOriginalCallerID");
 			return false;
 		}
-		GetPrivateProfileStringA("Database", "phoneNumber1", "9582242675", ChInfo[i].pPhoNumBuf, 31, "\\DBSettings.INI");
-		//i++;
+		GetPrivateProfileStringA("Database", "phoneNumber1", "8699311529", ChInfo[i].pPhoNumBuf, 31, "\\DBSettings.INI");
+		i++;
 
 
-		//if (SsmSetTxOriginalCallerID(i, reinterpret_cast<byte*>("1401870901")) == -1) //
-		//{
-		//	getErrorResult(L" SsmSetTxOriginalCallerID");
-		//	return false;
-		//}
-		//GetPrivateProfileStringA("Database", "phoneNumber2", "9743512890", ChInfo[i].pPhoNumBuf, 31, "\\DBSettings.INI");
+		if (SsmSetTxOriginalCallerID(i, reinterpret_cast<byte*>("1401870901")) == -1) //
+		{
+			getErrorResult(L" SsmSetTxOriginalCallerID");
+			return false;
+		}
+		GetPrivateProfileStringA("Database", "phoneNumber2", "9888557135", ChInfo[i].pPhoNumBuf, 31, "\\DBSettings.INI");
 		//CString number1(ChInfo[0].pPhoNumBuf), number2(ChInfo[1].pPhoNumBuf);
 		//number1.Append(number2);
 		//AfxMessageBox(number);

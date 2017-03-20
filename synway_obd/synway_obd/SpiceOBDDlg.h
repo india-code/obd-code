@@ -50,9 +50,11 @@ typedef struct {
 	int   lineState;
 	int InUse;
 	char DtmfBuf[251];
+	int DtmfState;
 	CDR_STATUS CDRStatus;
 	// user channel  vars
 	APP_USER_STATE	nStep;
+	int mediaState;
 	int				nToTrkCh;
 	char			pPhoNumBuf[31];
 	int				nTimeOut;
@@ -86,6 +88,7 @@ public:
 	BOOL UpdateDBData();
 	void CloseDBConn();
 	bool SetCLIOnChannels();
+	void LogErrorCodeAndMessage(int ch);
 	void UpDateATrunkChListCtrl();
 	void GetNextUserData();
 	CSpiceOBDDlg(CWnd* pParent = NULL);	// standard constructor
