@@ -19,6 +19,10 @@ enum APP_USER_STATE {
 	USER_WAIT_HANGUP
 };
 
+enum MEDIA_STATE {
+	MEDIA_IDLE,
+	MEDIA_PLAYING
+};
 typedef struct
 {
 	char call_id[20];

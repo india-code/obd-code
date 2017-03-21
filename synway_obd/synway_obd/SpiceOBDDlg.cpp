@@ -537,8 +537,8 @@ void CSpiceOBDDlg::LogErrorCodeAndMessage(int ch)
 
 void CSpiceOBDDlg::DoUserWork()
 {
-	int i = 0;
-	for (int i = 0; i < 2 /*nTotalCh*/; i++)
+	int nResult, errorCode;
+	for (int i = 0; i < 2/*nTotalCh*/; i++)
 	{
 		//logger.log(LOGINFO, "\nChannel [%d] state event got as %d", i, SsmGetChState(i));
 		if (SsmGetChType(i) != 11) continue;
@@ -546,7 +546,8 @@ void CSpiceOBDDlg::DoUserWork()
 		switch (ChInfo[i].nStep)
 		{
 		case USER_IDLE:
-			if (SsmGetChState(i) == 0)
+			ChInfo[i].lineState = SsmGetChState(i);
+			if (ChInfo[i].lineState == S_CALL_STANDBY)
 			{
 				SsmClearRxDtmfBuf(i);
 				if (SsmAutoDial(i, ChInfo[i].pPhoNumBuf) == 0) // making call
@@ -560,40 +561,103 @@ void CSpiceOBDDlg::DoUserWork()
 					ChInfo[i].nStep = USER_IDLE;
 				}
 			}
-			break;
-		case USER_WAIT_REMOTE_PICKUP:
-			ChInfo[i].lineState = SsmChkAutoDial(i);
-			if (ChInfo[i].lineState == DIAL_VOICE)
+			if (ChInfo[i].lineState == S_CALL_PENDING)
 			{
-				if (SsmPlayIndexString(i, "1") == -1)
-				{
-					LogErrorCodeAndMessage(i);
-					SsmHangup(i);
-					ChInfo[i].nStep = USER_IDLE;
-				}
-				else
-				{
-					logger.log(LOGINFO,"DTMF First SetTimeout for channel %d", i);
-					SsmSetWaitDtmfExA(i, 30000, 2, "123", true); //set the DTMF termination character
-					ChInfo[i].nStep = USER_TALKING;
-					ChInfo[i].mediaState = 0;
-				}
-			}
-			else if (SsmGetHookState(i) == 0 || (ChInfo[i].lineState == DIAL_NOANSWER) || 
-				(SsmGetChState(i) == S_CALL_PENDING) || (ChInfo[i].lineState == DIAL_BUSYTONE))		//Either user hangup or 30s timeout or any such reason
-			{
-				LogErrorCodeAndMessage(i);
 				SsmHangup(i);
 				SsmClearRxDtmfBuf(i);
 				ChInfo[i].nStep = USER_IDLE;
 			}
-			else if (ChInfo[i].lineState == DIAL_FAILURE)
+			break;
+		case USER_WAIT_REMOTE_PICKUP:
+			switch (SsmChkAutoDial(i))
 			{
-				int errorCode = SsmGetAutoDialFailureReason(i);
+			case DIAL_VOICE:   
+			case DIAL_VOICEF1:
+			case DIAL_VOICEF2:
+				if (i == 0) {
+					if (SsmPlayIndexString(i, "1") == -1)
+					{
+						LogErrorCodeAndMessage(i);
+						SsmHangup(i);
+						ChInfo[i].nStep = USER_IDLE;
+					}
+					else
+					{
+						logger.log(LOGINFO, "Call picked up and DTMF First SetTimeout for channel %d", i);
+						SsmSetWaitDtmfExA(i, 30000, 2, "123", true); //set the DTMF termination character
+						ChInfo[i].nStep = USER_TALKING;
+						ChInfo[i].mediaState = 0;
+					}
+				}
+				if (i == 1)
+				{
+					if (SsmPlayIndexString(i, "2") == -1)
+					{
+						LogErrorCodeAndMessage(i);
+						SsmHangup(i);
+						ChInfo[i].nStep = USER_IDLE;
+					}
+					else
+					{
+						logger.log(LOGINFO, "Call picked up and DTMF First SetTimeout for channel %d", i);
+						SsmSetWaitDtmfExA(i, 30000, 2, "123", true); //set the DTMF termination character
+						ChInfo[i].nStep = USER_TALKING;
+						ChInfo[i].mediaState = 0;
+					}
+				}
+
+				break;
+
+			case DIAL_NO_DIALTONE:
+			case DIAL_BUSYTONE:
+			case DIAL_ECHO_NOVOICE:
+			case DIAL_NOVOICE:
+			case DIAL_NOANSWER:
+			case DIAL_INVALID_PHONUM:
+
+				//LogErrorCodeAndMessage(i);
+				logger.log(LOGERR, "AutoDial State: %d at channel Number: %d", SsmChkAutoDial(i), i);
+				SsmHangup(i);
+				SsmClearRxDtmfBuf(i);
+				ChInfo[i].nStep = USER_IDLE;
+				break;
+
+			case DIAL_FAILURE : 
+
+				errorCode = SsmGetAutoDialFailureReason(i);
 				sprintf_s(ChInfo[i].CDRStatus.reason_code, "%d", errorCode);
 				sprintf_s(ChInfo[i].CDRStatus.reason, "AutoDial failed... Error Code# %d", errorCode);
+				logger.log(LOGERR, "%s at chnnel number: %d", ChInfo[i].CDRStatus.reason, i);
 				SsmClearRxDtmfBuf(i);
 				SsmHangup(i);
+				ChInfo[i].nStep = USER_IDLE;
+				break;
+
+			case DIAL_STANDBY:
+				nResult = SsmGetChStateKeepTime(i);
+
+				if (nResult > 2000)
+				{
+					//LogErrorCodeAndMessage(i);
+					logger.log(LOGERR, "Channel State: %d at channel Number: %d", DIAL_STANDBY, i);
+					SsmHangup(i);
+					SsmClearRxDtmfBuf(i);
+					ChInfo[i].nStep = USER_IDLE;
+				}
+
+				break;
+
+			case DIAL_DIALING:
+			case DIAL_ECHOTONE:
+			default:
+				break;
+			}
+			if (SsmGetChState(i) == S_CALL_PENDING)
+			{
+				//LogErrorCodeAndMessage(i);
+				logger.log(LOGERR, "Channel State: %d at channel Number: %d", "Pending...", i);
+				SsmHangup(i);
+				SsmClearRxDtmfBuf(i);
 				ChInfo[i].nStep = USER_IDLE;
 			}
 			break;
@@ -711,7 +775,7 @@ BOOL CSpiceOBDDlg::InitCtiBoard()
 				totalIdleChannels++;
 				ChInfo[i].nStep = USER_IDLE;
 			}
-			else
+			else 
 			{
 				//Set idle
 				SsmHangup(i);
@@ -735,44 +799,44 @@ BOOL CSpiceOBDDlg::InitCtiBoard()
 	logger.log(LOGINFO, "totalIdleChannels = %d, callEnabledChannels = %d, setIdleCalled = %d", totalIdleChannels, callEnabledChannels, setIdleCalled);
 
 	//Loading hello.wav file on different positions 
-	if (SsmLoadIndexData(1, "a", 7, "Hello.wav", 0, 49997) != 0)
+	if (SsmLoadIndexData(1, "a", 7, "!MS OBD-p.wav", 0, -1) != 0)
 		AfxMessageBox(L"Load Index 1 Error");
 	//Please leave word
-	if (SsmLoadIndexData(2, "b", 7, "Hello.wav", 49714, 12234) != 0)
+	if (SsmLoadIndexData(2, "b", 7, "510_Non_DT.wav", 0, -1) != 0)
 		AfxMessageBox(L"Load Index 2 Error");
-	//Number
-	if (SsmLoadIndexData(3, "c", 7, "Hello.wav", 65272, 2192) != 0)
-		AfxMessageBox(L"Load Index 3 Error");
-	//channel
-	if (SsmLoadIndexData(4, "d", 7, "Hello.wav", 70364, 3960) != 0)
-		AfxMessageBox(L"Load Index 4 Error");
-	//0
-	if (SsmLoadIndexData(5, "e", 7, "Hello.wav", 77860, 3253) != 0)
-		AfxMessageBox(L"Load Index 5 Error");
-	//1
-	if (SsmLoadIndexData(6, "f", 7, "Hello.wav", 83305, 2475) != 0)
-		AfxMessageBox(L"Load Index 6 Error");
-	//2
-	if (SsmLoadIndexData(7, "g", 7, "Hello.wav", 87760, 2475) != 0)
-		AfxMessageBox(L"Load Index 7 Error");
-	//3
-	if (SsmLoadIndexData(8, "h", 7, "Hello.wav", 90447, 4243) != 0)
-		AfxMessageBox(L"Load Index 8 Error");
-	//message
-	if (SsmLoadIndexData(9, "i", 7, "Hello.wav", 97165, 5021) != 0)
-		AfxMessageBox(L"Load Index 9 Error");
-	//cleared
-	if (SsmLoadIndexData(10, "j", 7, "Hello.wav", 104803, 7496) != 0)
-		AfxMessageBox(L"Load Index 10 Error");
-	//time 10s
-	if (SsmLoadIndexData(11, "k", 7, "Hello.wav", 114632, 8388) != 0)
-		AfxMessageBox(L"Load Index 11 Error");
-	//no message
-	if (SsmLoadIndexData(12, "l", 7, "Hello.wav", 125708, 6081) != 0)
-		AfxMessageBox(L"Load Index 12 Error");
-	//error annoucement
-	if (SsmLoadIndexData(13, "m", 7, "Hello.wav", 131931, 4000) != 0)
-		AfxMessageBox(L"Load Index 13 Error");
+	////Number
+	//if (SsmLoadIndexData(3, "c", 7, "Hello.wav", 65272, 2192) != 0)
+	//	AfxMessageBox(L"Load Index 3 Error");
+	////channel
+	//if (SsmLoadIndexData(4, "d", 7, "Hello.wav", 70364, 3960) != 0)
+	//	AfxMessageBox(L"Load Index 4 Error");
+	////0
+	//if (SsmLoadIndexData(5, "e", 7, "Hello.wav", 77860, 3253) != 0)
+	//	AfxMessageBox(L"Load Index 5 Error");
+	////1
+	//if (SsmLoadIndexData(6, "f", 7, "Hello.wav", 83305, 2475) != 0)
+	//	AfxMessageBox(L"Load Index 6 Error");
+	////2
+	//if (SsmLoadIndexData(7, "g", 7, "Hello.wav", 87760, 2475) != 0)
+	//	AfxMessageBox(L"Load Index 7 Error");
+	////3
+	//if (SsmLoadIndexData(8, "h", 7, "Hello.wav", 90447, 4243) != 0)
+	//	AfxMessageBox(L"Load Index 8 Error");
+	////message
+	//if (SsmLoadIndexData(9, "i", 7, "Hello.wav", 97165, 5021) != 0)
+	//	AfxMessageBox(L"Load Index 9 Error");
+	////cleared
+	//if (SsmLoadIndexData(10, "j", 7, "Hello.wav", 104803, 7496) != 0)
+	//	AfxMessageBox(L"Load Index 10 Error");
+	////time 10s
+	//if (SsmLoadIndexData(11, "k", 7, "Hello.wav", 114632, 8388) != 0)
+	//	AfxMessageBox(L"Load Index 11 Error");
+	////no message
+	//if (SsmLoadIndexData(12, "l", 7, "Hello.wav", 125708, 6081) != 0)
+	//	AfxMessageBox(L"Load Index 12 Error");
+	////error annoucement
+	//if (SsmLoadIndexData(13, "m", 7, "Hello.wav", 131931, 4000) != 0)
+	//	AfxMessageBox(L"Load Index 13 Error");
 	return true;
 }
 
@@ -784,7 +848,7 @@ bool CSpiceOBDDlg::SetCLIOnChannels()
 	if (ChInfo[i].nStep == USER_IDLE)
 	{
 		//setting caller ID 
-		if (SsmSetTxOriginalCallerID(i, reinterpret_cast<byte*>("1401870901")) == -1) //
+		if (SsmSetTxOriginalCallerID(i, reinterpret_cast<byte*>("9781023533")) == -1) //
 		{
 			getErrorResult(L" SsmSetTxOriginalCallerID");
 			return false;
@@ -793,7 +857,7 @@ bool CSpiceOBDDlg::SetCLIOnChannels()
 		i++;
 
 
-		if (SsmSetTxOriginalCallerID(i, reinterpret_cast<byte*>("1401870901")) == -1) //
+		if (SsmSetTxOriginalCallerID(i, reinterpret_cast<byte*>("8872065478")) == -1) //
 		{
 			getErrorResult(L" SsmSetTxOriginalCallerID");
 			return false;
