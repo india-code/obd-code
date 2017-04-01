@@ -7,5 +7,5 @@ class AESEncryption
 public:
 	AESEncryption(char* key);	
 	char* DecodeAndDecrypt(char* EncodedandEncrypted);
-	char* EncryptAndEncode(char* InputBuff);
+	std::string EncryptAndEncode(char InputBuff[]);
 };

@@ -21,13 +21,15 @@ char* AESEncryption::DecodeAndDecrypt(char* EncodedandEncrypted)
 	return DecryptedBuff;
 }
 
-char* AESEncryption::EncryptAndEncode(char* InputBuff)
+std::string AESEncryption::EncryptAndEncode(char InputBuff[])
 {
 	AesCtx context;
-	char EncryptedBuff[31];
+	char buff[31];
+	StrCpyA(buff, InputBuff);
+	StrCatA(buff, "");
 	AesSetKey(&context, AES_KEY_128BIT, BLOCKMODE_ECB, EncryptionKey, NULL);
-	AesEncryptECB(&context, EncryptedBuff, InputBuff, 16);
-	const std::string s = EncryptedBuff;
+	AesEncryptECB(&context, buff, buff, 16);
+	const std::string s = buff;
 	std::string encoded = base64_encode(reinterpret_cast<const unsigned char*>(s.c_str()), s.length());
-	return const_cast<char*>(encoded.c_str());
+	return encoded;
 }

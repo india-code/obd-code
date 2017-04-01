@@ -15,8 +15,8 @@ enum LogLevel
 class CLogger {
 	int MinLogLevel;
 	FILE *fp;
-private:
-	void getTime(char time_value[25]) {
+public:
+	tm getTime(char time_value[25]) {
 		struct tm			Time;
 		time_t				Timet;
 
@@ -41,15 +41,19 @@ private:
 #endif
 		sprintf_s(TimeStr, "%02d/%02d/%04d %02d:%02d:%02d.%03d ", Time.tm_mday, Time.tm_mon + 1, Time.tm_year + 1900, Time.tm_hour, Time.tm_min, Time.tm_sec, Timeb.millitm);
 		StrCpyA(time_value, TimeStr);
+		return Time;
 	}
-public:
-	CLogger(int MinLogLevel):MinLogLevel(MinLogLevel)
+	CLogger()
 	{
 		char CurPath[260];
 		GetCurrentDirectoryA(200, CurPath);
 		StrCatA(CurPath, "\\Application.log");
 
 		fopen_s(&fp, CurPath, "a");
+	}
+	void SetMinLogLevel(int minLogLevel)
+	{
+		MinLogLevel = minLogLevel;
 	}
 	void log(LogLevel logger, const char* format...) {
 
@@ -70,6 +74,7 @@ public:
 		}
 		va_end(args);
 	}
+
 	~CLogger()
 	{
 		fclose(fp);

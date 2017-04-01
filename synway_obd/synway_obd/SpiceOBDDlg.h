@@ -1,4 +1,3 @@
-
 // SpiceOBDDlg.h : header file
 //
 
@@ -8,6 +7,12 @@
 #include "shpa3api.h"
 #include "AESEncryption.h"
 #include "Logger.h"
+#include "Utils.h"
+#include <fstream>
+#include <map>
+#include <vector>
+
+using namespace std;
 
 enum APP_USER_STATE {
 	USER_IDLE,
@@ -16,6 +21,8 @@ enum APP_USER_STATE {
 	USER_WAIT_DIAL_TONE,
 	USER_WAIT_REMOTE_PICKUP,
 	USER_TALKING,
+	USER_CALL_WAIT_PATCHUP,
+	USER_CALL_PATCHUP,
 	USER_WAIT_HANGUP
 };
 
@@ -26,19 +33,20 @@ enum MEDIA_STATE {
 typedef struct
 {
 	char call_id[20];
-	char channel[30];
+	int channel;
 	char groupid[30];
 	char campaign_id[50];
 	char circle[20];
 	char call_date[20];
 	char ani[20];
 	char cli[20];
-	char call_time[20];
-	char answer_time[20];
-	char end_time[20];
-	char ring_duration[20];
-	char answer_duration[20];
-	char total_duration[20];
+	time_t call_time;
+	time_t answer_time;
+	time_t end_time;
+	int ring_duration;
+	int answer_duration;
+	int total_duration;
+	int callPatch_duration;
 	char reason_code[20];
 	char reason[100];
 	char context[30];
@@ -47,6 +55,7 @@ typedef struct
 	char retry_status[11];
 	char status[11];
 } CDR_STATUS;
+
 
 typedef struct {
 	// trunck channel vars
@@ -62,8 +71,19 @@ typedef struct {
 	int				nToTrkCh;
 	char			pPhoNumBuf[31];
 	int				nTimeOut;
+	int CampaignID;
 }CH_INFO;
 
+typedef struct
+{
+	vector<char*> phnumBuf;
+	char CLI[31];
+	int channelsAllocated;
+	int allocatedChannels;
+	char promptsPath[255];
+	char campaign_id[255];
+	int minCh, maxCh;
+}CampaignData;
 
 // CSpiceOBDDlg dialog
 class CSpiceOBDDlg : public CDialogEx
@@ -76,25 +96,33 @@ private:
 	// Construction
 public:
 	WORD	nTotalCh;
-
 	CH_INFO* ChInfo;
 	CLogger logger;
-	static int chIndex;
+	int totalPhoneNumbers;
+	static int chIndex1, chIndex2;
 	static int OffSet, row_count, getAndUpdateRowCount;
 	bool IsUpdate;
+	char *systemIpAddr;
+	ofstream outfile;
+	char PhoneNumbers1[6600][31], PhoneNumbers2[8100][31];
+	map<int, CampaignData> Campaigns;
+
+	void ReadNumbersFromFiles();
 	int GetAnIdleChannel();
 	BOOL InitCtiBoard();
 	void DoUserWork();
 	void SetChannelInitialStatus();
 	void InitUserDialingList();
 	void InitilizeDBConnection();
-	void GetDBData();
+	BOOL GetDBData();
 	BOOL UpdateDBData();
 	void CloseDBConn();
-	bool SetCLIOnChannels();
+	BOOL InitilizeChannels();
 	void LogErrorCodeAndMessage(int ch);
 	void UpDateATrunkChListCtrl();
 	void GetNextUserData();
+	char* GetReleaseErrorReason(WORD code);
+	void HangupCall(int ch);
 	CSpiceOBDDlg(CWnd* pParent = NULL);	// standard constructor
 
 										// Dialog Data
@@ -116,8 +144,10 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg void OnDestroy();
 	afx_msg void OnTimer(UINT nIDEvent);
+	afx_msg void OnBnClickedLogLevel();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
 public:
 	CListCtrl m_TrkChList;
+	int m_SetMinLogLevel;
 };
