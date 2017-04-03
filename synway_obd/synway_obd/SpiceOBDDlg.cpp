@@ -55,13 +55,11 @@ END_MESSAGE_MAP()
 
 CSpiceOBDDlg::CSpiceOBDDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_SYNWAY_OBD_DIALOG, pParent)
-	, m_SetMinLogLevel(0)
+	, m_SetMinLogLevel(0), aesEncryption("1234567891011121")
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
 
-int CSpiceOBDDlg::chIndex1 = 0;
-int CSpiceOBDDlg::chIndex2 = 0;
 int CSpiceOBDDlg::OffSet = ROW_COUNT;
 int CSpiceOBDDlg::row_count = ROW_COUNT;
 int CSpiceOBDDlg::getAndUpdateRowCount = 0;
@@ -205,7 +203,6 @@ BOOL CSpiceOBDDlg::GetDBData()
 {
 	/***  Read Records  ***/
 	 //call to decrypt values read from DB
-	AESEncryption aesEncryption("1234567891011121");
 	int query_state;
 	char queryStr[256];
 
@@ -356,9 +353,6 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	CString state;
 	wchar_t tmpstr[51];
 	int i, nIndex;
-	int query_state;
-	char queryStr[256];
-	AESEncryption aesEncryption("1234567891011121");
 	for (i = 0, nIndex = 0; i < nTotalCh; i++)
 	{
 		//if (SsmGetChType(i) != 2) continue;
@@ -384,81 +378,76 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 
 		nIndex++;
 	}
-	//if (state == "Idle" && i == row_count)
-	//{
-	//
-	//	//chIndex = chIndex + 30;
-	//OffSet = OffSet + 30;
-	/*if (IsUpdate)
-	{
-	if (UpdateDBData())
-	{
-	GetNextUserData();
-	}
-	}*/
-	//}
 	if (IsUpdate)
 	{
-		for (int i = 0; i < nTotalCh; i++)
+		UpdateStatusAndPickNextRecords();
+	}
+}
+
+void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
+{
+	int query_state;
+	char queryStr[256];
+	for (int i = 0; i < nTotalCh; i++)
+	{
+		if (ChInfo[i].EnCalled == true)
 		{
-			if (ChInfo[i].EnCalled == true)
+			ChInfo[i].EnCalled = false;
+			//Log CDR
+			ChInfo[i].CDRStatus.answer_duration = (ChInfo[i].CDRStatus.answer_time != 0) ? ChInfo[i].CDRStatus.end_time - ChInfo[i].CDRStatus.answer_time : 0;
+			ChInfo[i].CDRStatus.callPatch_duration = (ChInfo[i].CDRStatus.answer_time != 0) ? (ChInfo[i].CDRStatus.answer_time - ChInfo[i].CDRStatus.call_time) : (ChInfo[i].CDRStatus.end_time - ChInfo[i].CDRStatus.call_time);
+			ChInfo[i].CDRStatus.channel = i;
+			StrCpyA(ChInfo[i].CDRStatus.ani, ChInfo[i].pPhoNumBuf);
+			char dateVal[25], timeVal[15];
+			tm dateTime = logger.getTime(dateVal);
+			sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
+			sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
+			int tmpCmpId = ChInfo[i].CampaignID;
+			outfile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani
+				<< "#" << ChInfo[i].CDRStatus.status << "#" << ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.callPatch_duration << "#"
+				<< ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.channel << "#" << tmpCmpId << "#\n";
+			/////
+			if (tmpCmpId != -1)
 			{
-				ChInfo[i].EnCalled = false;
-				//Log CDR
-				ChInfo[i].CDRStatus.answer_duration = (ChInfo[i].CDRStatus.answer_time != 0) ? ChInfo[i].CDRStatus.end_time - ChInfo[i].CDRStatus.answer_time : 0;
-				ChInfo[i].CDRStatus.callPatch_duration = (ChInfo[i].CDRStatus.answer_time != 0) ? (ChInfo[i].CDRStatus.answer_time - ChInfo[i].CDRStatus.call_time) : (ChInfo[i].CDRStatus.end_time - ChInfo[i].CDRStatus.call_time);
-				ChInfo[i].CDRStatus.channel = i;
-				StrCpyA(ChInfo[i].CDRStatus.ani, ChInfo[i].pPhoNumBuf);
-				char dateVal[25], timeVal[15];
-				tm dateTime = logger.getTime(dateVal);
-				sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
-				sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
-				int tmpCmpId = ChInfo[i].CampaignID;
-				outfile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI<< "#" << ChInfo[i].CDRStatus.ani
-					<< "#" << ChInfo[i].CDRStatus.status << "#" << ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.callPatch_duration << "#"
-					<< ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.channel<< "#" << tmpCmpId << "#\n";
-				/////
-				if (tmpCmpId != -1)
+				if (Campaigns.at(tmpCmpId).phnumBuf.size() <= 1)
 				{
-					if (Campaigns.at(tmpCmpId).phnumBuf.size() <= 1)
+					sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d limit %d",
+						Campaigns.at(tmpCmpId).campaign_id, 0, (5 * Campaigns.at(tmpCmpId).channelsAllocated));
+
+					query_state = mysql_query(conn, queryStr);
+
+					if (query_state != 0)
 					{
-						sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d limit %d", Campaigns.at(tmpCmpId).campaign_id, 0, 5 * nTotalCh);
-
-						query_state = mysql_query(conn, queryStr);
-
-						if (query_state != 0)
-						{
-							CString err(mysql_error(conn));
-							AfxMessageBox(err);
-						}
-						MYSQL_RES * resPhBuf = mysql_store_result(conn);
-						MYSQL_ROW rowPhBuf;
-						while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
-						{
-							char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
-							Campaigns.at(tmpCmpId).phnumBuf.push_back(DecryptedVal);
-						}
+						CString err(mysql_error(conn));
+						AfxMessageBox(err);
 					}
-
-					if (!Campaigns.at(tmpCmpId).phnumBuf.empty())
+					MYSQL_RES * resPhBuf = mysql_store_result(conn);
+					MYSQL_ROW rowPhBuf;
+					while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
 					{
-						CString tempStr2(Campaigns.at(tmpCmpId).phnumBuf.front());
-						StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tmpCmpId).phnumBuf.front());
-						m_TrkChList.SetItemText(i, 4, tempStr2);
-						Campaigns.at(tmpCmpId).phnumBuf.erase(Campaigns.at(tmpCmpId).phnumBuf.begin());
-					}
-					else
-					{
-						StrCpyA(ChInfo[i].pPhoNumBuf, "");
-						m_TrkChList.SetItemText(i, 4, L"");
+						char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
+						Campaigns.at(tmpCmpId).phnumBuf.push_back(DecryptedVal);
 					}
 				}
-				StrCpyA(ChInfo[i].CDRStatus.reason, "");
-				StrCpyA(ChInfo[i].CDRStatus.status, "");
-				StrCpyA(ChInfo[i].CDRStatus.reason_code, "");
+
+				if (!Campaigns.at(tmpCmpId).phnumBuf.empty())
+				{
+					CString tempStr2(Campaigns.at(tmpCmpId).phnumBuf.front());
+					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tmpCmpId).phnumBuf.front());
+					m_TrkChList.SetItemText(i, 4, tempStr2);
+					Campaigns.at(tmpCmpId).phnumBuf.erase(Campaigns.at(tmpCmpId).phnumBuf.begin());
+				}
+				else
+				{
+					StrCpyA(ChInfo[i].pPhoNumBuf, "");
+					m_TrkChList.SetItemText(i, 4, L"");
+				}
 			}
-		}//For loop
-	}
+			StrCpyA(ChInfo[i].CDRStatus.reason, "");
+			StrCpyA(ChInfo[i].CDRStatus.status, "");
+			StrCpyA(ChInfo[i].CDRStatus.reason_code, "");
+		}
+	}//For loop
 }
 
 void CSpiceOBDDlg::CloseDBConn()
@@ -708,7 +697,7 @@ void CSpiceOBDDlg::DoUserWork()
 	IsUpdate = false;
 	WORD releaseCode;
 	char queryStr[256];
-	AESEncryption aesEncryption("1234567891011121");
+
 	for (int i = 0; i < nTotalCh; i++)
 	{
 		if (StrCmpA(ChInfo[i].pPhoNumBuf, "") == 0) continue;
@@ -956,7 +945,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 	//ReadNumbersFromFiles();
 	if (GetDBData() == TRUE)
 	{
-		//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.at(1).phnumBuf.size());
+		//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
 		systemIpAddr = Utils::GetIPAdd();
 		outfile.open("CDRInfo.txt", std::ofstream::app);
 

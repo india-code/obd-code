@@ -79,7 +79,6 @@ typedef struct
 	vector<char*> phnumBuf;
 	char CLI[31];
 	int channelsAllocated;
-	int allocatedChannels;
 	char promptsPath[255];
 	char campaign_id[255];
 	int minCh, maxCh;
@@ -99,12 +98,11 @@ public:
 	CH_INFO* ChInfo;
 	CLogger logger;
 	int totalPhoneNumbers;
-	static int chIndex1, chIndex2;
 	static int OffSet, row_count, getAndUpdateRowCount;
+	AESEncryption aesEncryption;
 	bool IsUpdate;
 	char *systemIpAddr;
 	ofstream outfile;
-	char PhoneNumbers1[6600][31], PhoneNumbers2[8100][31];
 	map<int, CampaignData> Campaigns;
 
 	void ReadNumbersFromFiles();
@@ -121,6 +119,7 @@ public:
 	void LogErrorCodeAndMessage(int ch);
 	void UpDateATrunkChListCtrl();
 	void GetNextUserData();
+	void UpdateStatusAndPickNextRecords();
 	char* GetReleaseErrorReason(WORD code);
 	void HangupCall(int ch);
 	CSpiceOBDDlg(CWnd* pParent = NULL);	// standard constructor
