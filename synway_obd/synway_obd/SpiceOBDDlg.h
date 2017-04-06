@@ -11,6 +11,7 @@
 #include <fstream>
 #include <map>
 #include <vector>
+#include <Shlwapi.h>
 
 using namespace std;
 
@@ -29,6 +30,14 @@ enum APP_USER_STATE {
 enum MEDIA_STATE {
 	MEDIA_IDLE,
 	MEDIA_PLAYING
+};
+
+enum OBD_DIAL_PLAN
+{
+	Informative = 1,
+	AcquisitionalOBDWith1stAnd2ndConsent,
+	AcquisitionalOBDWithout1stConsent,
+	AcquisitionalOBDWith1stConsent
 };
 typedef struct
 {
@@ -64,7 +73,9 @@ typedef struct {
 	int InUse;
 	char DtmfBuf[251];
 	int DtmfState;
+	int ConsentState;
 	CDR_STATUS CDRStatus;
+	OBD_DIAL_PLAN DialPlanStatus;
 	// user channel  vars
 	APP_USER_STATE	nStep;
 	int mediaState;
@@ -81,6 +92,8 @@ typedef struct
 	int channelsAllocated;
 	char promptsPath[255];
 	char campaign_id[255];
+	int loadedIndex[10];
+	OBD_DIAL_PLAN obdDialPlan;
 	int minCh, maxCh;
 }CampaignData;
 

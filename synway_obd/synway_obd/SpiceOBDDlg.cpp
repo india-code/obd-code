@@ -172,8 +172,8 @@ void CSpiceOBDDlg::SetChannelInitialStatus()
 		LVITEM lvItem;
 		int nItem;
 		CString chNum;
-		
-		chNum.Format(_T("%04d"), i );
+
+		chNum.Format(_T("%04d"), i);
 		lvItem.mask = LVIF_TEXT;
 		lvItem.iItem = i;
 		lvItem.iSubItem = 0;
@@ -202,11 +202,11 @@ void CSpiceOBDDlg::SetChannelInitialStatus()
 BOOL CSpiceOBDDlg::GetDBData()
 {
 	/***  Read Records  ***/
-	 //call to decrypt values read from DB
+	//call to decrypt values read from DB
 	int query_state;
 	char queryStr[256];
 
-	StrCpyA(queryStr, "select campaign_id, cli, port_number from tbl_campaign_master");
+	StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type from tbl_campaign_master");
 
 	//logger.log(LOGINFO, queryStr);
 
@@ -227,8 +227,10 @@ BOOL CSpiceOBDDlg::GetDBData()
 		StrCpyA(tempdata.campaign_id, row[0]);
 		StrCpyA(tempdata.CLI, row[1]);
 		tempdata.channelsAllocated = atoi(row[2]);
+		StrCpyA(tempdata.promptsPath, row[3]);
+		tempdata.obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
 
-		sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d limit %d", row[0], 0, 1);
+		sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d limit %d", row[0], 0, (5 * tempdata.channelsAllocated));
 
 		//logger.log(LOGINFO, queryStr);
 
@@ -248,7 +250,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 			tempdata.phnumBuf.push_back(DecryptedVal);
 		}
 		tempdata.minCh = channelsOccupied + 1;
-		channelsOccupied = tempdata.minCh + tempdata.channelsAllocated -1;
+		channelsOccupied = tempdata.minCh + tempdata.channelsAllocated - 1;
 		tempdata.maxCh = channelsOccupied;
 
 		Campaigns.insert(pair<int, CampaignData>(i, tempdata));
@@ -405,11 +407,11 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			int tmpCmpId = ChInfo[i].CampaignID;
 			outfile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani
 				<< "#" << ChInfo[i].CDRStatus.status << "#" << ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.callPatch_duration << "#"
-				<< ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.channel << "#" << tmpCmpId << "#\n";
-			/////
+				<< ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.channel << "#" << tmpCmpId << "#\n";
+			StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
 			if (tmpCmpId != -1)
 			{
-				if (Campaigns.at(tmpCmpId).phnumBuf.size() <= 1)
+				if (Campaigns.at(tmpCmpId).phnumBuf.size() <= (2 * Campaigns.at(tmpCmpId).channelsAllocated))
 				{
 					sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d limit %d",
 						Campaigns.at(tmpCmpId).campaign_id, 0, (5 * Campaigns.at(tmpCmpId).channelsAllocated));
@@ -423,6 +425,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 					}
 					MYSQL_RES * resPhBuf = mysql_store_result(conn);
 					MYSQL_ROW rowPhBuf;
+					Campaigns.at(tmpCmpId).phnumBuf.clear();
 					while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
 					{
 						char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
@@ -601,7 +604,7 @@ void CSpiceOBDDlg::LogErrorCodeAndMessage(int ch)
 
 void CSpiceOBDDlg::HangupCall(int ch)
 {
-	//SsmClearRxDtmfBuf(i);
+	SsmClearRxDtmfBuf(i);
 	SsmStopPlayIndex(ch);
 	SsmHangup(ch);
 	ChInfo[ch].EnCalled = true;
@@ -694,6 +697,7 @@ void CSpiceOBDDlg::DoUserWork()
 	int nResult, nDirection;
 	CString tempPhoneNum;
 	char CampID[7];
+	int tempCampId;
 	IsUpdate = false;
 	WORD releaseCode;
 	char queryStr[256];
@@ -705,6 +709,8 @@ void CSpiceOBDDlg::DoUserWork()
 		nResult = SsmGetAutoCallDirection(i, &nDirection);
 
 		if (nResult == -1 || nDirection < 1) continue;
+		tempCampId = ChInfo[i].CampaignID;
+		if (tempCampId == -1) continue;
 
 		switch (ChInfo[i].nStep)
 		{
@@ -746,7 +752,7 @@ void CSpiceOBDDlg::DoUserWork()
 			break;
 		case USER_WAIT_REMOTE_PICKUP:
 			/*logger.log(LOGINFO, "Phone Number: %s, AutoDial State:%d Channel Number: %d, channel state: %d, Release reason: %hu , autodialFail Reason : %d, Pending reason: %d",
-				ChInfo[i].pPhoNumBuf, SsmChkAutoDial(i), i, SsmGetChState(i), SsmGetReleaseReason(i), SsmGetAutoDialFailureReason(i), SsmGetPendingReason(i));*/
+			ChInfo[i].pPhoNumBuf, SsmChkAutoDial(i), i, SsmGetChState(i), SsmGetReleaseReason(i), SsmGetAutoDialFailureReason(i), SsmGetPendingReason(i));*/
 			if (SsmGetChState(i) == S_CALL_RINGING)
 			{
 				StrCpyA(ChInfo[i].CDRStatus.status, "FAIL");
@@ -758,7 +764,8 @@ void CSpiceOBDDlg::DoUserWork()
 			case DIAL_VOICE:
 			case DIAL_VOICEF1:
 			case DIAL_VOICEF2:
-				sprintf_s(CampID, "%d", ChInfo[i].CampaignID);
+				sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[1]);
+				logger.log(LOGINFO, "Camp Id: %s", CampID);
 				if (SsmPlayIndexString(i, CampID) == -1)
 				{
 					LogErrorCodeAndMessage(i);
@@ -767,11 +774,12 @@ void CSpiceOBDDlg::DoUserWork()
 				else
 				{
 					//logger.log(LOGINFO, "Call picked up channel: %d, phone number: %s", i, ChInfo[i].pPhoNumBuf);
-					//SsmSetWaitDtmfExA(i, 30000, 2, "123", true); //set the DTMF termination character
+					//SsmSetWaitDtmfExA(i, 60000, 1, "9", true); //set the DTMF termination character
 					ChInfo[i].nStep = USER_TALKING;
-					//ChInfo[i].mediaState = 0;
+					ChInfo[i].DialPlanStatus = Campaigns.at(tempCampId).obdDialPlan;
+					ChInfo[i].ConsentState = 1;
 				}
-				
+
 				StrCpyA(ChInfo[i].CDRStatus.status, "SUCCESS");
 				StrCpyA(ChInfo[i].CDRStatus.reason, "Answered");
 				//StrCpyA(ChInfo[i].CDRStatus.reason_code, "7");
@@ -782,7 +790,7 @@ void CSpiceOBDDlg::DoUserWork()
 			case DIAL_ECHO_NOVOICE:
 			case DIAL_INVALID_PHONUM:
 			case DIAL_BUSYTONE:
-			case DIAL_NOVOICE:	
+			case DIAL_NOVOICE:
 			case DIAL_NOANSWER:
 				ChInfo[i].CDRStatus.end_time = time(0);
 				releaseCode = SsmGetReleaseReason(i);
@@ -826,32 +834,139 @@ void CSpiceOBDDlg::DoUserWork()
 			}
 			break;
 		case USER_TALKING:
-			ChInfo[i].mediaState = SsmCheckPlay(i);
+			switch (ChInfo[i].DialPlanStatus)
+			{
+			case Informative:
+				ChInfo[i].mediaState = SsmCheckPlay(i);
+				if (ChInfo[i].mediaState == 0)
+				{
+					StrCpyA(ChInfo[i].CDRStatus.reason_code, "0");
+					//logger.log(LOGINFO, "media state 0");
+				}
+				if (ChInfo[i].mediaState >= 1)
+				{
+					StrCpyA(ChInfo[i].CDRStatus.reason_code, "1");
+					//logger.log(LOGINFO, "media state > 1");
+					HangupCall(i);
+				}
+				break;
+
+			case AcquisitionalOBDWith1stConsent:
+				switch (ChInfo[i].ConsentState) {
+				case 1:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					if (ChInfo[i].mediaState >= 0)
+					{
+						StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
+						if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+						{
+							SsmStopPlayIndex(i);
+							SsmClearRxDtmfBuf(i);
+							ChInfo[i].ConsentState = 3;
+							sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+							SsmPlayIndexString(i, CampID);
+						}
+						else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0 && ChInfo[i].mediaState >= 1) //No Input
+						{
+							SsmStopPlayIndex(i);
+							ChInfo[i].ConsentState = 2;
+							sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+							SsmPlayIndexString(i, CampID);
+							SsmSetWaitDtmfExA(i, 20000, 1, "1", true);
+						}
+						else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") != 0 && StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") != 0) //Wrong input
+						{
+							SsmStopPlayIndex(i);
+							SsmClearRxDtmfBuf(i);
+							ChInfo[i].ConsentState = 2;
+							sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+							SsmPlayIndexString(i, CampID);
+							SsmSetWaitDtmfExA(i, 20000, 1, "1", true);
+						}
+					}
+					break;
+				case 2:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					if (ChInfo[i].mediaState >= 0)
+					{
+						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
+						{
+							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+							{
+								SsmStopPlayIndex(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 3;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								SsmPlayIndexString(i, CampID);
+								
+							}
+							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") != 0 && StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") != 0) //Wrong input
+							{
+								StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
+								SsmStopPlayIndex(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 3;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								SsmPlayIndexString(i, CampID);
+							}
+							else
+							{
+								StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
+								HangupCall(i);
+							}
+						}
+					}
+					break;
+				case 3:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					if (ChInfo[i].mediaState >= 1)
+					{
+						HangupCall(i);
+					}
+					break;
+				default:
+					break;
+				}
+				break;
+			default:
+				break;
+			}
+			//ChInfo[i].mediaState = SsmCheckPlay(i);
 			ChInfo[i].lineState = SsmGetChState(i);
+			StrCpyA(ChInfo[i].CDRStatus.status, "SUCCESS");
+			StrCpyA(ChInfo[i].CDRStatus.reason, "Answered");
 			//SsmTalkWithEx for call patching
 			ChInfo[i].CDRStatus.end_time = time(0);
-			if (ChInfo[i].mediaState == 0)
-			{
-				StrCpyA(ChInfo[i].CDRStatus.status, "SUCCESS");
-				StrCpyA(ChInfo[i].CDRStatus.reason, "Answered");
-				StrCpyA(ChInfo[i].CDRStatus.reason_code, "0");
-				//if (SsmAutoDial(6, "9218580794") == 0)ChInfo[i].nStep = USER_CALL_WAIT_PATCHUP;
-				//logger.log(LOGERR, "channel %0d Media State: Playing, on phone number: %s", i, ChInfo[i].pPhoNumBuf);
-			}
-			if (ChInfo[i].mediaState >= 1)
-			{
-				//LogErrorCodeAndMessage(i);
-				StrCpyA(ChInfo[i].CDRStatus.status, "SUCCESS");
-				StrCpyA(ChInfo[i].CDRStatus.reason, "Answered");
-				StrCpyA(ChInfo[i].CDRStatus.reason_code, "1");
-				//logger.log(LOGERR, "channel %0d Media State: %d, on phone number: %s", i, ChInfo[i].mediaState, ChInfo[i].pPhoNumBuf);
-				HangupCall(i);
-			}
+			//ChInfo[i].DtmfState = SsmChkWaitDtmf(i, ChInfo[i].DtmfBuf);
+			//if (ChInfo[i].DtmfState >= 1 && ChInfo[i].DtmfState <= 3)
+			//{
+			//	logger.log(LOGINFO, "DTMF Recieved : %s on channel: %d", ChInfo[i].DtmfBuf, i);
+			//	if (StrChrA(ChInfo[i].DtmfBuf, '1'))
+			//	{
+			//		StrCpyA(ChInfo[i].CDRStatus.dtmf, "1");
+			//	}
+			//	else
+			//	{
+			//		StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
+			//	}
+			//	HangupCall(i);
+			//}
+			//if (ChInfo[i].mediaState == 0 || ChInfo[i].DtmfState == 0)
+			//{
+			//	StrCpyA(ChInfo[i].CDRStatus.reason_code, "0");
+			//	//if (SsmAutoDial(6, "9218580794") == 0)ChInfo[i].nStep = USER_CALL_WAIT_PATCHUP;
+			//	//logger.log(LOGERR, "channel %0d Media State: Playing, on phone number: %s", i, ChInfo[i].pPhoNumBuf);
+			//}
+			////if (ChInfo[i].mediaState >= 1)
+			////{
+			////	//LogErrorCodeAndMessage(i);
+			////	StrCpyA(ChInfo[i].CDRStatus.reason_code, "1");
+			////	//logger.log(LOGERR, "channel %0d Media State: %d, on phone number: %s", i, ChInfo[i].mediaState, ChInfo[i].pPhoNumBuf);
+			////	HangupCall(i);
+			////}
 			if (ChInfo[i].lineState == S_CALL_PENDING) //remote/user hangup
 			{
 				//LogErrorCodeAndMessage(i);
-				StrCpyA(ChInfo[i].CDRStatus.status, "SUCCESS");
-				StrCpyA(ChInfo[i].CDRStatus.reason, "Answered");
 				//logger.log(LOGERR, "channel %0d State: %d, on phone number: %s", i, ChInfo[i].lineState, ChInfo[i].pPhoNumBuf);
 				StrCpyA(ChInfo[i].CDRStatus.reason_code, "7");
 				HangupCall(i);
@@ -859,21 +974,21 @@ void CSpiceOBDDlg::DoUserWork()
 			break;
 			/* call patchup cases
 			case USER_CALL_WAIT_PATCHUP:
-					if (SsmChkAutoDial(6) == DIAL_VOICE)
-					{
-						SsmStopPlayIndex(i);
-						SsmTalkWith(i, 6);
-						ChInfo[i].nStep = USER_CALL_PATCHUP;
-						logger.log(LOGINFO, "call patchup picked up..");
-					}
-					break;
-				case USER_CALL_PATCHUP:
-					if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(6) == S_CALL_PENDING)
-					{
-						HangupCall(i);
-						HangupCall(6);
-					}
-					break;*/
+			if (SsmChkAutoDial(6) == DIAL_VOICE)
+			{
+			SsmStopPlayIndex(i);
+			SsmTalkWith(i, 6);
+			ChInfo[i].nStep = USER_CALL_PATCHUP;
+			logger.log(LOGINFO, "call patchup picked up..");
+			}
+			break;
+			case USER_CALL_PATCHUP:
+			if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(6) == S_CALL_PENDING)
+			{
+			HangupCall(i);
+			HangupCall(6);
+			}
+			break;*/
 		default:
 			ChInfo[i].nStep = USER_IDLE;
 			break;
@@ -922,7 +1037,7 @@ void CSpiceOBDDlg::ReadNumbersFromFiles()
 	tempdata.minCh = 0; tempdata.maxCh = 0;
 	Campaigns.insert(pair<int, CampaignData>(1, tempdata));
 	tempdata.phnumBuf.clear();
-	
+
 	//Second
 	std::ifstream fp2("phoneNumbers2.txt");
 	while (1)
@@ -973,7 +1088,8 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			{
 				ChInfo[i].CampaignID = -1;
 				StrCpyA(ChInfo[i].pPhoNumBuf, "");
-				for (unsigned int j = 1; j <= Campaigns.size(); j++)
+				StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
+				for (size_t j = 1; j <= Campaigns.size(); j++)
 				{
 					if (i >= Campaigns.at(j).minCh && i <= Campaigns.at(j).maxCh)
 					{
@@ -996,11 +1112,42 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 				StrCpyA(ChInfo[i].CDRStatus.reason_code, "");
 			}
 		}
-		//Loading hello.wav file on different positions 
-		if (SsmLoadIndexData(1, "a", 7, "obd-1-p.wav", 0, -1) != 0)
-			AfxMessageBox(L"Load Index 1 Error");
-		if (SsmLoadIndexData(2, "b", 7, "IMSOBD-Roke Na Ruke Naina.wav", 0, -1) != 0)
-			AfxMessageBox(L"Load Index 1 Error");
+		//Loading wav file on different positions for all campaigns
+		char alias[10];
+		int index = 0;
+		for (size_t i = 1; i <= Campaigns.size(); i++)
+		{
+			char tempPath[255];
+			char fileName[16];
+			int j = 1;
+
+			StrCpyA(tempPath, "");
+			while (true)
+			{
+				StrCpyA(tempPath, Campaigns.at(i).promptsPath);
+				sprintf_s(fileName, "%d.wav", j);
+				StrCatA(tempPath, fileName);
+				if (PathFileExistsA(tempPath))
+				{
+					index = i * 10 + j;
+					sprintf_s(alias, "alias%d", index);
+					if (SsmLoadIndexData(index, alias, 7, tempPath, 0, -1) != 0)
+					{
+						CString errMsg;
+						errMsg.Format(L"Load Index %d Error", index);
+						AfxMessageBox(errMsg);
+						PostQuitMessage(0);
+					}
+					Campaigns.at(i).loadedIndex[j] = index;
+					//logger.log(LOGINFO, "Path: %s, index: %d, alias: %s, total Index: %d", tempPath, Campaigns.at(i).loadedIndex[j], alias, SsmGetTotalIndexSeg());
+					j++;
+				}
+				else
+				{
+					break;
+				}
+			}//End While
+		}//End For
 	}
 	return true;
 }
