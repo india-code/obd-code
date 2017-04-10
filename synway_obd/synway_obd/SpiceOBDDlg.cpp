@@ -247,7 +247,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 		while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
 		{
 			char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
-			tempdata.phnumBuf.push_back(DecryptedVal);
+			tempdata.phnumBuf.push_back({DecryptedVal, rowPhBuf[0]});
 		}
 		tempdata.minCh = channelsOccupied + 1;
 		channelsOccupied = tempdata.minCh + tempdata.channelsAllocated - 1;
@@ -265,37 +265,47 @@ BOOL CSpiceOBDDlg::UpdateDBData(/*int chState*/)
 	try {
 		int query_state, chState = 1;
 		char queryStr1[131071], queryStr2[131071];
-		StrCpyA(queryStr1, "update obdtest set ChState =  ( case ");
-
-		for (int i = 0; i < row_count; i++)
+		StrCpyA(queryStr1, "update tbl_outdialer_base set status =  ( case ");
+		int countNumbers = 0;
+		int lastIndex;
+		for (int i = 0; i < nTotalCh; i++)
 		{
-			if (ChInfo[i].EnCalled == true)
+			if (ChInfo[i].rowTobeUpdated)
 			{
-				char tempStr[48];
-				sprintf_s(tempStr, "when DNIS = '%s' then %d ", ChInfo[i].pPhoNumBuf, chState/*ChInfo[i].nStep*/); //TODO: coented section will be used
+				char tempStr[1024];
+
+				sprintf_s(tempStr, "when ani = '%s' then %d ", ChInfo[i].pPhoNumBuf, chState/*ChInfo[i].nStep*/); //TODO: comented section will be used
 				StrCatA(queryStr1, tempStr);
+				countNumbers++;
+				lastIndex = i;
 			}
 		}
-		StrCpyA(queryStr2, "end) where DNIS in(");
+		StrCpyA(queryStr2, "end) where ani in(");
 		int i = 0;
-		for (i = 0; i < row_count - 1; i++)
+		for (i = 0; i < nTotalCh; i++)
 		{
-			if (ChInfo[i].EnCalled == true)
+			if (ChInfo[i].rowTobeUpdated == true && countNumbers  > 1)
 			{
-				char tempStr[48];
+				char tempStr[1024];
 				sprintf_s(tempStr, "'%s', ", ChInfo[i].pPhoNumBuf);
 				StrCatA(queryStr2, tempStr);
+				countNumbers--;
 			}
 		}
 
 		//For the last one no comma required
+	
 		char tempStr[48];
-		sprintf_s(tempStr, "'%s'", ChInfo[i].pPhoNumBuf);
+		sprintf_s(tempStr, "'%s'", ChInfo[lastIndex].pPhoNumBuf);
 		StrCatA(queryStr2, tempStr);
+			
+		
 
 		StrCatA(queryStr2, ")");
 		StrCatA(queryStr1, queryStr2);
 		query_state = mysql_query(conn, queryStr1);
+
+		logger.log(LOGINFO, queryStr1);
 
 		if (query_state != 0)
 		{
@@ -405,13 +415,16 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
 			sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
 			int tmpCmpId = ChInfo[i].CampaignID;
-			outfile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani
+			outfile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani << "#" << ChInfo[i].CDRStatus.encrypted_ani
 				<< "#" << ChInfo[i].CDRStatus.status << "#" << ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.callPatch_duration << "#"
-				<< ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.channel << "#" << tmpCmpId << "#\n";
+				<< ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#" << ChInfo[i].CDRStatus.channel << "#" << tmpCmpId << "#\n";
+			
 			StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
+			StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
+			
 			if (tmpCmpId != -1)
-			{
-				if (Campaigns.at(tmpCmpId).phnumBuf.size() <= (2 * Campaigns.at(tmpCmpId).channelsAllocated))
+			{	
+				if ((Campaigns.at(tmpCmpId).phnumBuf.size() <= (2 * Campaigns.at(tmpCmpId).channelsAllocated)) && !Campaigns.at(tmpCmpId).hasReachedThreshold)
 				{
 					sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d limit %d",
 						Campaigns.at(tmpCmpId).campaign_id, 0, (5 * Campaigns.at(tmpCmpId).channelsAllocated));
@@ -429,20 +442,33 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 					while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
 					{
 						char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
-						Campaigns.at(tmpCmpId).phnumBuf.push_back(DecryptedVal);
+						Campaigns.at(tmpCmpId).phnumBuf.push_back({ DecryptedVal, rowPhBuf[0] });
+					}
+					logger.log(LOGINFO, "vector size loaded from DB : %d for campaign: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
+					if (Campaigns.at(tmpCmpId).phnumBuf.size() <= (2 * Campaigns.at(tmpCmpId).channelsAllocated))
+					{
+						Campaigns.at(tmpCmpId).hasReachedThreshold = true;
 					}
 				}
 
 				if (!Campaigns.at(tmpCmpId).phnumBuf.empty())
 				{
-					CString tempStr2(Campaigns.at(tmpCmpId).phnumBuf.front());
-					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tmpCmpId).phnumBuf.front());
+					CString tempStr2(Campaigns.at(tmpCmpId).phnumBuf.front().ani);
+					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tmpCmpId).phnumBuf.front().ani);
+					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tmpCmpId).phnumBuf.front().encryptedAni);
 					m_TrkChList.SetItemText(i, 4, tempStr2);
 					Campaigns.at(tmpCmpId).phnumBuf.erase(Campaigns.at(tmpCmpId).phnumBuf.begin());
+					logger.log(LOGINFO, "UpdateStatusAndPickNextRecords Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
+					//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
+					if (!UpdatePhNumbersStatus(i))
+					{
+						logger.log(LOGINFO,"UpdateStatusAndPickNextRecords Row not updated...ph number: %s, channel number: %d", ChInfo[i].pPhoNumBuf, i);
+					}
 				}
 				else
 				{
 					StrCpyA(ChInfo[i].pPhoNumBuf, "");
+					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
 					m_TrkChList.SetItemText(i, 4, L"");
 				}
 			}
@@ -453,6 +479,28 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 	}//For loop
 }
 
+//Update record in table...
+BOOL CSpiceOBDDlg::UpdatePhNumbersStatus(int ch)
+{
+	char queryStr[256];
+
+	sprintf_s(queryStr, "update tbl_outdialer_base set status = 1 where campaign_id = '%s' and ani = '%s'",
+		Campaigns.at(ChInfo[ch].CampaignID).campaign_id, ChInfo[ch].CDRStatus.encrypted_ani);
+	//logger.log(LOGINFO, "update query for phone number: %s, Encrypted Ani: %s, Channel Num:%d", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.encrypted_ani, ch);
+	int query_state = mysql_query(conn, queryStr);
+
+	if (query_state != 0)
+	{
+		CString err(mysql_error(conn));
+		AfxMessageBox(err);
+	}
+	if (mysql_affected_rows(conn) >= 1)
+	{
+		return true;
+	}
+	logger.log(LOGERR, "UpdatePhNumbersStatus Number update failed: %s, query string: %s, channel Num: %d", ChInfo[ch].pPhoNumBuf, queryStr, ch);
+	return false;
+}
 void CSpiceOBDDlg::CloseDBConn()
 {
 	mysql_free_result(res);
@@ -700,7 +748,6 @@ void CSpiceOBDDlg::DoUserWork()
 	int tempCampId;
 	IsUpdate = false;
 	WORD releaseCode;
-	char queryStr[256];
 
 	for (int i = 0; i < nTotalCh; i++)
 	{
@@ -731,22 +778,13 @@ void CSpiceOBDDlg::DoUserWork()
 					LogErrorCodeAndMessage(i);
 					HangupCall(i);
 				}
-				//Update record in table...
-				std::string encryptedAni = aesEncryption.EncryptAndEncode(ChInfo[i].pPhoNumBuf);
-				sprintf_s(queryStr, "update tbl_outdialer_base set status = 1 where ani = '%s'", encryptedAni.c_str());
-				//logger.log(LOGINFO, queryStr);
-				int query_state = mysql_query(conn, queryStr);
-
-				if (query_state != 0)
-				{
-					CString err(mysql_error(conn));
-					AfxMessageBox(err);
-				}
+				logger.log(LOGINFO, "DoUserWork Number dialed: %s Encrypted ani: %s , channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
 			}
 			if (ChInfo[i].lineState == S_CALL_PENDING)
 			{
+				SsmStopPlayIndex(i);
+				SsmClearRxDtmfBuf(i);
 				SsmHangup(i);
-				//SsmClearRxDtmfBuf(i);
 				ChInfo[i].nStep = USER_IDLE;
 			}
 			break;
@@ -765,7 +803,11 @@ void CSpiceOBDDlg::DoUserWork()
 			case DIAL_VOICEF1:
 			case DIAL_VOICEF2:
 				sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[1]);
-				logger.log(LOGINFO, "Camp Id: %s", CampID);
+				//logger.log(LOGINFO, "Camp Id: %s", CampID);
+				StrCpyA(ChInfo[i].CDRStatus.status, "SUCCESS");
+				StrCpyA(ChInfo[i].CDRStatus.reason, "Answered");
+				//StrCpyA(ChInfo[i].CDRStatus.reason_code, "7");
+				ChInfo[i].CDRStatus.answer_time = time(0);
 				if (SsmPlayIndexString(i, CampID) == -1)
 				{
 					LogErrorCodeAndMessage(i);
@@ -774,16 +816,14 @@ void CSpiceOBDDlg::DoUserWork()
 				else
 				{
 					//logger.log(LOGINFO, "Call picked up channel: %d, phone number: %s", i, ChInfo[i].pPhoNumBuf);
-					//SsmSetWaitDtmfExA(i, 60000, 1, "9", true); //set the DTMF termination character
 					ChInfo[i].nStep = USER_TALKING;
 					ChInfo[i].DialPlanStatus = Campaigns.at(tempCampId).obdDialPlan;
-					ChInfo[i].ConsentState = 1;
+					if (ChInfo[i].DialPlanStatus != Informative)
+					{
+						ChInfo[i].ConsentState = 1;
+						SsmSetWaitDtmfExA(i, 18000, 1, "12", true); //set the DTMF termination character
+					}
 				}
-
-				StrCpyA(ChInfo[i].CDRStatus.status, "SUCCESS");
-				StrCpyA(ChInfo[i].CDRStatus.reason, "Answered");
-				//StrCpyA(ChInfo[i].CDRStatus.reason_code, "7");
-				ChInfo[i].CDRStatus.answer_time = time(0);
 				break;
 			case DIAL_FAILURE:
 			case DIAL_NO_DIALTONE:
@@ -836,6 +876,121 @@ void CSpiceOBDDlg::DoUserWork()
 		case USER_TALKING:
 			switch (ChInfo[i].DialPlanStatus)
 			{
+			case AcquisitionalOBDWith1stAnd2ndConsent:
+				switch (ChInfo[i].ConsentState) {
+				case 1:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					//logger.log(LOGINFO, "Media state: %d, ph Number: %s", ChInfo[i].mediaState, ChInfo[i].pPhoNumBuf);
+					if (ChInfo[i].mediaState >= 0)
+					{
+						//StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
+						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
+						{
+							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+							{
+								SsmStopPlayIndex(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 3;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								SsmPlayIndexString(i, CampID);
+								SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+							}
+							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No Input
+							{
+								SsmStopPlayIndex(i);
+								ChInfo[i].ConsentState = 2;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+								SsmPlayIndexString(i, CampID);
+								SsmSetWaitDtmfExA(i, 18000, 1, "1", true);
+							}
+							else //Wrong input
+							{
+								SsmStopPlayIndex(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 4;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								SsmPlayIndexString(i, CampID);
+								//SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
+							}
+						}
+					}
+					break;
+				case 2:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					if (ChInfo[i].mediaState >= 0)
+					{
+						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
+						{
+							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+							{
+								SsmStopPlayIndex(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 3;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								SsmPlayIndexString(i, CampID);
+								SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+							}
+							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No input
+							{
+								SsmStopPlayIndex(i);
+								ChInfo[i].ConsentState = 4;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								SsmPlayIndexString(i, CampID);
+							}
+							else //Wrong input
+							{
+								SsmStopPlayIndex(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 4;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								SsmPlayIndexString(i, CampID);
+							}
+						}
+					}
+					break;
+				case 3:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					if (ChInfo[i].mediaState >= 0)
+					{
+						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf2) >= 1)
+						{
+							if (StrCmpA(ChInfo[i].CDRStatus.dtmf2, "9") == 0) //Right Input
+							{
+								SsmStopPlayIndex(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 4;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[5]);
+								SsmPlayIndexString(i, CampID);
+							}
+							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf2, "") == 0) //No input
+							{
+								SsmStopPlayIndex(i);
+								ChInfo[i].ConsentState = 4;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								SsmPlayIndexString(i, CampID);
+							}
+							else //Wrong input
+							{
+								SsmStopPlayIndex(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 4;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								SsmPlayIndexString(i, CampID);
+							}
+						}
+					}
+					break;
+				case 4:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					if (ChInfo[i].mediaState >= 1)
+					{
+						HangupCall(i);
+					}
+					break;
+				default:
+					break;
+				}
+				break;
 			case Informative:
 				ChInfo[i].mediaState = SsmCheckPlay(i);
 				if (ChInfo[i].mediaState == 0)
@@ -855,33 +1010,37 @@ void CSpiceOBDDlg::DoUserWork()
 				switch (ChInfo[i].ConsentState) {
 				case 1:
 					ChInfo[i].mediaState = SsmCheckPlay(i);
+					//logger.log(LOGINFO, "Media state: %d, ph Number: %s", ChInfo[i].mediaState, ChInfo[i].pPhoNumBuf);
 					if (ChInfo[i].mediaState >= 0)
 					{
-						StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
-						if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+						//StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
+						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
 						{
-							SsmStopPlayIndex(i);
-							SsmClearRxDtmfBuf(i);
-							ChInfo[i].ConsentState = 3;
-							sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-							SsmPlayIndexString(i, CampID);
-						}
-						else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0 && ChInfo[i].mediaState >= 1) //No Input
-						{
-							SsmStopPlayIndex(i);
-							ChInfo[i].ConsentState = 2;
-							sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-							SsmPlayIndexString(i, CampID);
-							SsmSetWaitDtmfExA(i, 20000, 1, "1", true);
-						}
-						else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") != 0 && StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") != 0) //Wrong input
-						{
-							SsmStopPlayIndex(i);
-							SsmClearRxDtmfBuf(i);
-							ChInfo[i].ConsentState = 2;
-							sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-							SsmPlayIndexString(i, CampID);
-							SsmSetWaitDtmfExA(i, 20000, 1, "1", true);
+							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+							{
+								SsmStopPlayIndex(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 3;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								SsmPlayIndexString(i, CampID);
+							}
+							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No Input
+							{
+								SsmStopPlayIndex(i);
+								ChInfo[i].ConsentState = 2;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+								SsmPlayIndexString(i, CampID);
+								SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
+							}
+							else //Wrong input
+							{
+								SsmStopPlayIndex(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 2;
+								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								SsmPlayIndexString(i, CampID);
+								SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
+							}
 						}
 					}
 					break;
@@ -898,7 +1057,7 @@ void CSpiceOBDDlg::DoUserWork()
 								ChInfo[i].ConsentState = 3;
 								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
 								SsmPlayIndexString(i, CampID);
-								
+
 							}
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") != 0 && StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") != 0) //Wrong input
 							{
@@ -1021,37 +1180,37 @@ BOOL CSpiceOBDDlg::InitCtiBoard()
 
 void CSpiceOBDDlg::ReadNumbersFromFiles()
 {
-	int totalCampaigns = 2;
-	std::ifstream fp1("phoneNumbers1.txt");
-	CampaignData tempdata;
-	char *temp;
-	while (1)
-	{
-		temp = new char[31];
-		fp1.getline(temp, ' ');
-		if (strcmp(temp, "") == 0) break;
-		tempdata.phnumBuf.push_back(temp);
-	}
-	fp1.close();
-	StrCpyA(tempdata.CLI, "9814701418");
-	tempdata.minCh = 0; tempdata.maxCh = 0;
-	Campaigns.insert(pair<int, CampaignData>(1, tempdata));
-	tempdata.phnumBuf.clear();
+	//int totalCampaigns = 2;
+	//std::ifstream fp1("phoneNumbers1.txt");
+	//CampaignData tempdata;
+	//char *temp;
+	//while (1)
+	//{
+	//	temp = new char[31];
+	//	fp1.getline(temp, ' ');
+	//	if (strcmp(temp, "") == 0) break;
+	//	tempdata.phnumBuf.push_back(temp);
+	//}
+	//fp1.close();
+	//StrCpyA(tempdata.CLI, "9814701418");
+	//tempdata.minCh = 0; tempdata.maxCh = 0;
+	//Campaigns.insert(pair<int, CampaignData>(1, tempdata));
+	//tempdata.phnumBuf.clear();
 
-	//Second
-	std::ifstream fp2("phoneNumbers2.txt");
-	while (1)
-	{
-		temp = new char[31];
-		fp2.getline(temp, ' ');
-		if (strcmp(temp, "") == 0) break;
-		tempdata.phnumBuf.push_back(temp);
-	}
-	fp2.close();
-	StrCpyA(tempdata.CLI, "9781001635");
-	tempdata.minCh = 15; tempdata.maxCh = 15;
-	Campaigns.insert(pair<int, CampaignData>(2, tempdata));
-	tempdata.phnumBuf.clear();
+	////Second
+	//std::ifstream fp2("phoneNumbers2.txt");
+	//while (1)
+	//{
+	//	temp = new char[31];
+	//	fp2.getline(temp, ' ');
+	//	if (strcmp(temp, "") == 0) break;
+	//	tempdata.phnumBuf.push_back(temp);
+	//}
+	//fp2.close();
+	//StrCpyA(tempdata.CLI, "9781001635");
+	//tempdata.minCh = 15; tempdata.maxCh = 15;
+	//Campaigns.insert(pair<int, CampaignData>(2, tempdata));
+	//tempdata.phnumBuf.clear();
 }
 
 
@@ -1070,6 +1229,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 		for (int i = 0; i < nTotalCh; i++)
 		{
 			ChInfo[i].EnCalled = false;
+			ChInfo[i].rowTobeUpdated = false;
 			int chType = SsmGetChType(i);
 			if (chType == 11) //ISUP channel(China SS7 signaling ISUP)
 			{
@@ -1088,7 +1248,9 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			{
 				ChInfo[i].CampaignID = -1;
 				StrCpyA(ChInfo[i].pPhoNumBuf, "");
+				StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
 				StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
+				StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
 				for (size_t j = 1; j <= Campaigns.size(); j++)
 				{
 					if (i >= Campaigns.at(j).minCh && i <= Campaigns.at(j).maxCh)
@@ -1096,8 +1258,14 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 						ChInfo[i].CampaignID = j;
 						if (!Campaigns.at(j).phnumBuf.empty())
 						{
-							StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(j).phnumBuf.front());
+						    StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(j).phnumBuf.front().ani);
+							StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(j).phnumBuf.front().encryptedAni);
 							Campaigns.at(j).phnumBuf.erase(Campaigns.at(j).phnumBuf.begin());
+							logger.log(LOGINFO, "InitilizeChannels Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
+							if (!UpdatePhNumbersStatus(i))
+							{
+								logger.log(LOGINFO, "InitilizeChannels Row not updated... channel number: %d", i);
+							}
 						}
 						//setting caller ID 
 						if (SsmSetTxCallerId(i, Campaigns.at(j).CLI) == -1)
@@ -1120,8 +1288,8 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			char tempPath[255];
 			char fileName[16];
 			int j = 1;
-
 			StrCpyA(tempPath, "");
+			Campaigns.at(i).hasReachedThreshold = false;
 			while (true)
 			{
 				StrCpyA(tempPath, Campaigns.at(i).promptsPath);
@@ -1175,5 +1343,5 @@ void CSpiceOBDDlg::OnDestroy()
 	delete[] ChInfo;
 	outfile.close();
 	SsmCloseCti();
-	//CloseDBConn();
+	CloseDBConn();
 }

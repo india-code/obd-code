@@ -35,9 +35,9 @@ enum MEDIA_STATE {
 enum OBD_DIAL_PLAN
 {
 	Informative = 1,
-	AcquisitionalOBDWith1stAnd2ndConsent,
+	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
 	AcquisitionalOBDWithout1stConsent,
-	AcquisitionalOBDWith1stConsent
+	AcquisitionalOBDWith1stConsent /*1: welcome, 2: No input, 3: Thanks, 4: wrong*/
 };
 typedef struct
 {
@@ -61,6 +61,7 @@ typedef struct
 	char context[30];
 	char encrypted_ani[100];
 	char dtmf[50];
+	char dtmf2[50];
 	char retry_status[11];
 	char status[11];
 } CDR_STATUS;
@@ -69,6 +70,7 @@ typedef struct
 typedef struct {
 	// trunck channel vars
 	bool  EnCalled;
+	BOOL rowTobeUpdated;
 	int   lineState;
 	int InUse;
 	char DtmfBuf[251];
@@ -87,9 +89,16 @@ typedef struct {
 
 typedef struct
 {
-	vector<char*> phnumBuf;
+	char* ani;
+	char* encryptedAni;
+}pnNumWithEncryptedAni;
+
+typedef struct
+{
+	vector<pnNumWithEncryptedAni> phnumBuf;
 	char CLI[31];
 	int channelsAllocated;
+	BOOL hasReachedThreshold;
 	char promptsPath[255];
 	char campaign_id[255];
 	int loadedIndex[10];
@@ -118,6 +127,7 @@ public:
 	ofstream outfile;
 	map<int, CampaignData> Campaigns;
 
+	BOOL UpdatePhNumbersStatus(int ch);
 	void ReadNumbersFromFiles();
 	int GetAnIdleChannel();
 	BOOL InitCtiBoard();
