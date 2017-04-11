@@ -193,10 +193,11 @@ void CSpiceOBDDlg::SetChannelInitialStatus()
 			m_TrkChList.SetItemText(i, 4, tempStr1);
 			m_TrkChList.SetItemText(nItem, 5, campIdStr);
 		}
-		CString chStateNum;
+		/*CString chStateNum;
 		chStateNum.Format(L"%d", SsmGetChState(i));
-		m_TrkChList.SetItemText(nItem, 6, chStateNum);
+		m_TrkChList.SetItemText(nItem, 6, chStateNum);*/
 	}
+	UpDateATrunkChListCtrl();
 }
 
 BOOL CSpiceOBDDlg::GetDBData()
@@ -294,12 +295,12 @@ BOOL CSpiceOBDDlg::UpdateDBData(/*int chState*/)
 		}
 
 		//For the last one no comma required
-	
+
 		char tempStr[48];
 		sprintf_s(tempStr, "'%s'", ChInfo[lastIndex].pPhoNumBuf);
 		StrCatA(queryStr2, tempStr);
-			
-		
+
+
 
 		StrCatA(queryStr2, ")");
 		StrCatA(queryStr1, queryStr2);
@@ -368,16 +369,71 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	for (i = 0, nIndex = 0; i < nTotalCh; i++)
 	{
 		//if (SsmGetChType(i) != 2) continue;
-		switch (ChInfo[i].nStep)
+		switch (SsmGetChState(i))
 		{
-		case USER_IDLE:					state = "Idle";			break;
-		case USER_GET_PHONE_NUM:		state = "ReceiveNumber"; break;
-		case USER_WAIT_DIAL_TONE:		state = "WaitForDialTone";	break;
-		case USER_WAIT_REMOTE_PICKUP:	state = "WaitCalledPartyPickup"; break;
-		case USER_TALKING:				state = "Talking";		break;
-		case USER_WAIT_HANGUP:			state = "WaitStationHangup"; break;
-		case USER_CALL_PATCHUP:         state = "UserCallPatchUP"; break;
-		case USER_CALL_WAIT_PATCHUP:    state = "UserCallWaitPatchUP"; break;
+		case S_CALL_STANDBY:				state = "S_CALL_STANDBY"; break;
+		case S_CALL_PICKUPED:				state = "S_CALL_PICKUPED"; break;
+		case S_CALL_RINGING:				state = "S_CALL_RINGING"; break;
+		case S_CALL_TALKING:				state = "S_CALL_TALKING"; break;
+		case S_CALL_ANALOG_WAITDIALTONE:	state = "S_CALL_ANALOG_WAITDIALTONE";	break;
+		case S_CALL_ANALOG_TXPHONUM:		state = "S_CALL_ANALOG_TXPHONUM"; break;
+		case S_CALL_ANALOG_WAITDIALRESULT:	state = "S_CALL_ANALOG_WAITDIALRESULT";		break;
+		case S_CALL_PENDING:				state = "S_CALL_ANALOG_WAITDIALRESULT"; break;
+		case S_CALL_OFFLINE:				state = "S_CALL_OFFLINE"; break;
+		case S_CALL_WAIT_REMOTE_PICKUP:		state = "S_CALL_WAIT_REMOTE_PICKUP"; break;
+		case S_CALL_ANALOG_CLEAR:			state = "S_CALL_ANALOG_CLEAR"; break;
+		case S_CALL_UNAVAILABLE:			state = "S_CALL_UNAVAILABLE"; break;
+		case S_CALL_LOCKED:					state = "S_CALL_LOCKED"; break;
+		case S_CALL_RemoteBlock:			state = "S_CALL_RemoteBlock"; break;
+		case S_CALL_LocalBlock:				state = "S_CALL_LocalBlock"; break;
+		case S_CALL_Ss1InWaitPhoNum:		state = "S_CALL_Ss1InWaitPhoNum"; break;
+		case S_CALL_Ss1InWaitFwdStop:		state = "S_CALL_Ss1InWaitFwdStop"; break;
+		case S_CALL_Ss1InWaitCallerID:		state = "S_CALL_Ss1InWaitCallerID"; break;
+		case S_CALL_Ss1InWaitKD:			state = "S_CALL_Ss1InWaitKD"; break;
+		case S_CALL_Ss1InWaitKDStop:		state = "S_CALL_Ss1InWaitKDStop"; break;
+		case S_CALL_SS1_SAYIDLE:			state = "S_CALL_SS1_SAYIDLE"; break;
+		case S_CALL_SS1WaitIdleCAS:			state = "S_CALL_SS1WaitIdleCAS"; break;
+		case S_CALL_SS1PhoNumHoldup:		state = "S_CALL_SS1PhoNumHoldup"; break;
+		case S_CALL_Ss1InWaitStopSendA3p:	state = "S_CALL_Ss1InWaitPhoNum"; break;
+		case S_CALL_Ss1OutWaitBwdAck:		state = "S_CALL_Ss1OutWaitBwdAck"; break;
+		case S_CALL_Ss1OutTxPhoNum:			state = "S_CALL_Ss1OutTxPhoNum"; break;
+		case S_CALL_Ss1OutWaitAppendPhoNum:	state = "S_CALL_Ss1OutWaitAppendPhoNum"; break;
+		case S_CALL_Ss1OutTxCallerID:		state = "S_CALL_Ss1OutTxCallerID"; break;
+		case S_CALL_Ss1OutWaitKB:			state = "S_CALL_Ss1OutWaitKB"; break;
+		case S_CALL_Ss1OutDetectA3p:		state = "S_CALL_Ss1OutDetectA3p"; break;
+		case S_ISDN_OUT_WAIT_NET_RESPONSE:	state = "S_ISDN_OUT_WAIT_NET_RESPONSE"; break;
+		case S_ISDN_OUT_PLS_APPEND_NO:		state = "S_ISDN_OUT_PLS_APPEND_NO"; break;
+		case S_ISDN_IN_CHK_CALL_IN:			state = "S_ISDN_IN_CHK_CALL_IN"; break;
+		case S_ISDN_IN_RCVING_NO:			state = "S_ISDN_IN_RCVING_NO"; break;
+		case S_ISDN_IN_WAIT_TALK:			state = "S_ISDN_IN_WAIT_TALK"; break;
+		case S_ISDN_OUT_WAIT_ALERT:			state = "S_ISDN_OUT_WAIT_ALERT"; break;
+		case S_ISDN_CALL_BEGIN:				state = "S_ISDN_CALL_BEGIN"; break;
+		case S_ISDN_WAIT_HUANGUP:			state = "S_ISDN_WAIT_HUANGUP"; break;
+		case S_ISDN_IN_CALL_PROCEEDING:		state = "S_ISDN_IN_CALL_PROCEEDING"; break;
+		case S_CALL_SENDRING:				state = "S_CALL_SENDRING "; break;
+		case S_ISUP_WaitSAM:				state = "S_ISUP_WaitSAM"; break;
+		case S_ISUP_WaitRLC:				state = "S_ISUP_WaitRLC"; break;
+		case S_ISUP_WaitReset:				state = "S_ISUP_WaitReset"; break;
+		case S_ISUP_LocallyBlocked:			state = "S_ISUP_LocallyBlocked"; break;
+		case S_ISUP_RemotelyBlocked:        state = "S_ISUP_RemotelyBlocked"; break;
+		case S_ISUP_WaitDialAnswer:			state = "S_ISUP_WaitDialAnswer"; break;
+		case S_ISUP_WaitINF:				state = "S_ISUP_WaitINF"; break;
+		case S_ISUP_WaitSetCallerID:		state = "S_ISUP_WaitSetCallerID"; break;
+		case S_DTRC_ACTIVE:					state = "S_DTRC_ACTIVE"; break;
+		case S_ISUP_Suspend:				state = "S_ISUP_Suspend"; break;
+		case S_CALL_DISCONECT:				state = "S_CALL_DISCONECT"; break;
+		case S_CALL_SS1WaitFlashEnd:		state = "S_CALL_SS1WaitFlashEnd"; break;
+		case S_CALL_FlashEnd:				state = "S_CALL_FlashEnd"; break;
+		case S_CALL_SIGNAL_ERROR:			state = "S_CALL_SIGNAL_ERROR"; break;
+		case S_CALL_FRAME_ERROR:			state = "S_CALL_FRAME_ERROR"; break;
+		case S_IP_MEDIA_LOCK:				state = "S_IP_MEDIA_LOCK"; break;
+		case S_IP_MEDIA_OPEN:				state = "S_IP_MEDIA_OPEN"; break;
+		case S_SPY_RBSWAITACK:				state = "S_SPY_RBSWAITACK"; break;
+		case S_SPY_RBSSENDACK:				state = "S_SPY_RBSSENDACK"; break;
+		case S_IPR_USING:					state = "S_IPR_USING"; break;
+		case S_IPR_COMMUNICATING:			state = "S_IPR_COMMUNICATING"; break;
+		case S_ISUP_WaitCOT:				state = "S_ISUP_WaitCOT"; break;
+
 		}
 
 		m_TrkChList.GetItemText(nIndex, 6, tmpstr, 50);
@@ -418,12 +474,12 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			outfile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani << "#" << ChInfo[i].CDRStatus.encrypted_ani
 				<< "#" << ChInfo[i].CDRStatus.status << "#" << ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.callPatch_duration << "#"
 				<< ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#" << ChInfo[i].CDRStatus.channel << "#" << tmpCmpId << "#\n";
-			
+
 			StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
 			StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
-			
+
 			if (tmpCmpId != -1)
-			{	
+			{
 				if ((Campaigns.at(tmpCmpId).phnumBuf.size() <= (2 * Campaigns.at(tmpCmpId).channelsAllocated)) && !Campaigns.at(tmpCmpId).hasReachedThreshold)
 				{
 					sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d limit %d",
@@ -1258,7 +1314,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 						ChInfo[i].CampaignID = j;
 						if (!Campaigns.at(j).phnumBuf.empty())
 						{
-						    StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(j).phnumBuf.front().ani);
+							StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(j).phnumBuf.front().ani);
 							StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(j).phnumBuf.front().encryptedAni);
 							Campaigns.at(j).phnumBuf.erase(Campaigns.at(j).phnumBuf.begin());
 							logger.log(LOGINFO, "InitilizeChannels Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
