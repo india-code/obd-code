@@ -55,7 +55,7 @@ END_MESSAGE_MAP()
 
 CSpiceOBDDlg::CSpiceOBDDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_SYNWAY_OBD_DIALOG, pParent)
-	, m_SetMinLogLevel(0), aesEncryption("1234567891011121")
+	, m_SetMinLogLevel(0), aesEncryption("1234567891011121"), countFile(1)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -156,7 +156,7 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 
 	port = GetPrivateProfileIntA("Database", "Port", 3306, InitDBSettings);
 	nTotalCh = GetPrivateProfileIntA("Database", "TotalChannelsCount", 90, InitDBSettings);
-	//logger.log(LOGINFO, "host: %s, username: %s, password: %s, dbname: %s, port: %d, TotalChannelsCount: ", host, username, password, DBName, port, nTotalCh);
+	logger.log(LOGINFO, "host: %s, username: %s, password: %s, dbname: %s, port: %d, TotalChannelsCount: ", host, username, password, DBName, port, nTotalCh);
 
 	if (mysql_real_connect(conn, host, username, password, DBName, port, NULL, 0) == 0)
 	{
@@ -464,20 +464,51 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			//Log CDR
 			ChInfo[i].CDRStatus.answer_duration = (ChInfo[i].CDRStatus.answer_time != 0) ? ChInfo[i].CDRStatus.end_time - ChInfo[i].CDRStatus.answer_time : 0;
 			ChInfo[i].CDRStatus.callPatch_duration = (ChInfo[i].CDRStatus.answer_time != 0) ? (ChInfo[i].CDRStatus.answer_time - ChInfo[i].CDRStatus.call_time) : (ChInfo[i].CDRStatus.end_time - ChInfo[i].CDRStatus.call_time);
+			ChInfo[i].CDRStatus.total_duration = ChInfo[i].CDRStatus.callPatch_duration + ChInfo[i].CDRStatus.answer_duration;
 			ChInfo[i].CDRStatus.channel = i;
 			StrCpyA(ChInfo[i].CDRStatus.ani, ChInfo[i].pPhoNumBuf);
-			char dateVal[25], timeVal[15];
+			char dateVal[25], timeVal[15], call_time[20], answer_time[20], end_time[20];
+			tm ct, at, et;
 			tm dateTime = logger.getTime(dateVal);
 			sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
 			sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
-			int tmpCmpId = ChInfo[i].CampaignID;
-			outfile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani << "#" << ChInfo[i].CDRStatus.encrypted_ani
-				<< "#" << ChInfo[i].CDRStatus.status << "#" << ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.callPatch_duration << "#"
-				<< ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#" << ChInfo[i].CDRStatus.channel << "#" << tmpCmpId << "#\n";
 
+			localtime_s(&ct, &ChInfo[i].CDRStatus.call_time);
+			strftime(call_time, sizeof(call_time), "%X", &ct);
+
+			localtime_s(&at, &ChInfo[i].CDRStatus.answer_time);
+			strftime(answer_time, sizeof(answer_time), "%X", &at);
+
+			localtime_s(&et, &ChInfo[i].CDRStatus.end_time);
+			strftime(end_time, sizeof(end_time), "%X", &et);
+	
+
+			int tmpCmpId = ChInfo[i].CampaignID;
+			outfile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani 
+				<< "#" << ChInfo[i].CDRStatus.encrypted_ani << "#" << call_time << "#"<<answer_time << "#" << end_time << "#" << ChInfo[i].CDRStatus.callPatch_duration 
+				<< "#" << ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.total_duration <<"#" << ChInfo[i].CDRStatus.status << "#" 
+				<< ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#" 
+				<< ChInfo[i].CDRStatus.channel << "#" << tmpCmpId << "#\n";
+
+			//Check if CDR file is greater than 10 MB make a new one.
+			if (outfile.tellp() >= 10000000)
+			{
+				outfile.close();
+				char fileName[50];
+				sprintf_s(fileName, "CDRInfo%d.txt", countFile);
+				outfile.open(fileName, std::ofstream::app);
+				countFile++;
+			}
+			//logging correct consent recieved
+			if (StrCmpA(ChInfo[i].CDRStatus.firstConsent, "") && StrCmpA(ChInfo[i].CDRStatus.secondConsent, ""))
+			{
+				ConsentFile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].pPhoNumBuf
+					<< "#" << ChInfo[i].CDRStatus.firstConsent << "#" << ChInfo[i].CDRStatus.secondConsent<<"#";
+			}
 			StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
 			StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
-
+			StrCpyA(ChInfo[i].CDRStatus.firstConsent, "");
+			StrCpyA(ChInfo[i].CDRStatus.secondConsent, "");
 			if (tmpCmpId != -1)
 			{
 				if ((Campaigns.at(tmpCmpId).phnumBuf.size() <= (2 * Campaigns.at(tmpCmpId).channelsAllocated)) && !Campaigns.at(tmpCmpId).hasReachedThreshold)
@@ -950,6 +981,7 @@ void CSpiceOBDDlg::DoUserWork()
 								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
 								SsmPlayIndexString(i, CampID);
 								SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+								StrCpyA(ChInfo[i].CDRStatus.firstConsent, ChInfo[i].CDRStatus.dtmf); //copying correct input only.
 							}
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No Input
 							{
@@ -985,6 +1017,7 @@ void CSpiceOBDDlg::DoUserWork()
 								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
 								SsmPlayIndexString(i, CampID);
 								SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+								StrCpyA(ChInfo[i].CDRStatus.firstConsent, ChInfo[i].CDRStatus.dtmf); //copying correct input only.
 							}
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No input
 							{
@@ -1017,6 +1050,7 @@ void CSpiceOBDDlg::DoUserWork()
 								ChInfo[i].ConsentState = 4;
 								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[5]);
 								SsmPlayIndexString(i, CampID);
+								StrCpyA(ChInfo[i].CDRStatus.secondConsent, ChInfo[i].CDRStatus.dtmf2); //copying correct input only.
 							}
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf2, "") == 0) //No input
 							{
@@ -1278,7 +1312,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 		//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
 		systemIpAddr = Utils::GetIPAdd();
 		outfile.open("CDRInfo.txt", std::ofstream::app);
-
+		ConsentFile.open("CorrectConsent.txt", std::ofstream::app);
 		//Initialization of channels on trunk-board
 		ChInfo = new CH_INFO[nTotalCh];
 
@@ -1307,6 +1341,9 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 				StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
 				StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
 				StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
+				StrCpyA(ChInfo[i].CDRStatus.firstConsent, "");
+				StrCpyA(ChInfo[i].CDRStatus.secondConsent, "");
+
 				for (size_t j = 1; j <= Campaigns.size(); j++)
 				{
 					if (i >= Campaigns.at(j).minCh && i <= Campaigns.at(j).maxCh)
@@ -1398,6 +1435,7 @@ void CSpiceOBDDlg::OnDestroy()
 	CDialog::OnDestroy();
 	delete[] ChInfo;
 	outfile.close();
+	ConsentFile.close();
 	SsmCloseCti();
 	CloseDBConn();
 }

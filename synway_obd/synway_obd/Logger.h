@@ -15,6 +15,7 @@ enum LogLevel
 class CLogger {
 	int MinLogLevel;
 	FILE *fp;
+	int fileCounter;
 public:
 	tm getTime(char time_value[25]) {
 		struct tm			Time;
@@ -43,7 +44,7 @@ public:
 		StrCpyA(time_value, TimeStr);
 		return Time;
 	}
-	CLogger()
+	CLogger(): fileCounter(1)
 	{
 		char CurPath[260];
 		GetCurrentDirectoryA(200, CurPath);
@@ -73,6 +74,14 @@ public:
 		case 5:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
 		}
 		va_end(args);
+		if (ftell(fp) >= 10000000)
+		{
+			fclose(fp);
+			char fileName[50];
+			sprintf_s(fileName, "Application%d.txt", fileCounter);
+			fopen_s(&fp, fileName, "a");
+			fileCounter++;
+		}
 	}
 
 	~CLogger()

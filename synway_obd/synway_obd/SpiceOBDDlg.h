@@ -62,6 +62,8 @@ typedef struct
 	char encrypted_ani[100];
 	char dtmf[50];
 	char dtmf2[50];
+	char firstConsent[50];
+	char secondConsent[50];
 	char retry_status[11];
 	char status[11];
 } CDR_STATUS;
@@ -124,7 +126,9 @@ public:
 	AESEncryption aesEncryption;
 	bool IsUpdate;
 	char *systemIpAddr;
+	int countFile;
 	ofstream outfile;
+	ofstream ConsentFile;
 	map<int, CampaignData> Campaigns;
 
 	BOOL UpdatePhNumbersStatus(int ch);
