@@ -456,6 +456,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 {
 	int query_state;
 	char queryStr[256];
+	char queryStrInsert[1024];
 	for (int i = 0; i < nTotalCh; i++)
 	{
 		if (ChInfo[i].EnCalled == true)
@@ -467,7 +468,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			ChInfo[i].CDRStatus.total_duration = ChInfo[i].CDRStatus.callPatch_duration + ChInfo[i].CDRStatus.answer_duration;
 			ChInfo[i].CDRStatus.channel = i;
 			StrCpyA(ChInfo[i].CDRStatus.ani, ChInfo[i].pPhoNumBuf);
-			char dateVal[25], timeVal[15], call_time[20], answer_time[20], end_time[20];
+			char dateVal[25], timeVal[15], call_time[20], answer_time[20], end_time[20]; 
 			tm ct, at, et;
 			tm dateTime = logger.getTime(dateVal);
 			sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
@@ -476,12 +477,18 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			localtime_s(&ct, &ChInfo[i].CDRStatus.call_time);
 			strftime(call_time, sizeof(call_time), "%X", &ct);
 
-			localtime_s(&at, &ChInfo[i].CDRStatus.answer_time);
-			strftime(answer_time, sizeof(answer_time), "%X", &at);
+			if (ChInfo[i].CDRStatus.answer_time != 0) {
+				localtime_s(&at, &ChInfo[i].CDRStatus.answer_time);
+				strftime(answer_time, sizeof(answer_time), "%X", &at);
+			}
+			else
+			{
+				StrCpyA(answer_time, "");
+			}
 
 			localtime_s(&et, &ChInfo[i].CDRStatus.end_time);
 			strftime(end_time, sizeof(end_time), "%X", &et);
-	
+			
 
 			int tmpCmpId = ChInfo[i].CampaignID;
 			outfile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani 
@@ -499,11 +506,25 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 				outfile.open(fileName, std::ofstream::app);
 				countFile++;
 			}
+			//Insert Call records in DB
+			sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_calls(channel, campaign_id, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id) \
+				VALUES(%d, '%s', 'Idea PB', '%s', '%s', '%s#%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s')",
+				ChInfo[i].CDRStatus.channel, Campaigns.at(tmpCmpId).campaign_id, ChInfo[i].CDRStatus.ani, Campaigns.at(tmpCmpId).CLI, ChInfo[i].CDRStatus.dtmf, ChInfo[i].CDRStatus.dtmf2, ChInfo[i].CDRStatus.answer_duration,
+				StrCmpA(ChInfo[i].CDRStatus.status, "SUCCESS") == 0 ? 1 : 0, ChInfo[i].CDRStatus.callPatch_duration, dateVal, call_time, answer_time, end_time, ChInfo[i].CDRStatus.reason_code,
+				ChInfo[i].CDRStatus.total_duration, ChInfo[i].CDRStatus.reason, ChInfo[i].CDRStatus.encrypted_ani, ChInfo[i].CDRStatus.ani, timeVal);
+
+			logger.log(LOGINFO, queryStrInsert);
+			query_state = mysql_query(conn, queryStrInsert);
+			if (query_state != 0)
+			{
+				CString err(mysql_error(conn));
+				AfxMessageBox(err);
+			}
 			//logging correct consent recieved
 			if (StrCmpA(ChInfo[i].CDRStatus.firstConsent, "") && StrCmpA(ChInfo[i].CDRStatus.secondConsent, ""))
 			{
 				ConsentFile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].pPhoNumBuf
-					<< "#" << ChInfo[i].CDRStatus.firstConsent << "#" << ChInfo[i].CDRStatus.secondConsent<<"#";
+					<< "#" << ChInfo[i].CDRStatus.firstConsent << "#" << ChInfo[i].CDRStatus.secondConsent<< "#\n";
 			}
 			StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
 			StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
