@@ -760,7 +760,7 @@ void CSpiceOBDDlg::LogErrorCodeAndMessage(int ch)
 
 void CSpiceOBDDlg::HangupCall(int ch)
 {
-	SsmClearRxDtmfBuf(i);
+	SsmClearRxDtmfBuf(ch);
 	SsmStopPlayIndex(ch);
 	SsmHangup(ch);
 	ChInfo[ch].EnCalled = true;
