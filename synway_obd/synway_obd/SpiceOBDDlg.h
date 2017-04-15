@@ -6,7 +6,6 @@
 #include "mysql.h"
 #include "shpa3api.h"
 #include "AESEncryption.h"
-
 #include "Logger.h"
 #include "Utils.h"
 #include <fstream>

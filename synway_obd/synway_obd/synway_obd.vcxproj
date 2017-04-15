@@ -200,6 +200,7 @@
     <ClInclude Include="SpiceOBDDlg.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="Utils.h" />
+    <ClInclude Include="zip.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AESEncryption.cpp" />
@@ -212,6 +213,7 @@
     </ClCompile>
     <ClCompile Include="SpiceOBD.cpp" />
     <ClCompile Include="SpiceOBDDlg.cpp" />
+    <ClCompile Include="zip.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="synway_obd.rc" />

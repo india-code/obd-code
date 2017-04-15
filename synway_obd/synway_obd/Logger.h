@@ -1,6 +1,7 @@
 // logger.h : is being used for generate logs
 #pragma once
 #include <sys/timeb.h>
+#include "zip.h"
 
 enum LogLevel
 {
@@ -15,7 +16,7 @@ enum LogLevel
 class CLogger {
 	int MinLogLevel;
 	FILE *fp;
-	int fileCounter;
+	char CurFilePath[256];
 public:
 	tm getTime(char time_value[25]) {
 		struct tm                  Time;
@@ -48,10 +49,10 @@ public:
 	{
 		openLoggerFile();
 	}
-	void openLoggerFile()
+	void zipCurrentFile(char* fileName)
 	{
-		char CurPath[260];
-		char fileName[50];
+		HZIP hz;
+		char CurPath[256];
 		char folderName[50];
 		char timeValue[25];
 
@@ -69,11 +70,26 @@ public:
 		{
 			CreateDirectoryA(CurPath, NULL);
 		}
-		sprintf_s(fileName, "\\Application_%02d%02d%02d.log", timeVal.tm_hour, timeVal.tm_min, timeVal.tm_sec);
-
+		StrCatA(CurPath, "\\");
 		StrCatA(CurPath, fileName);
+		StrCatA(CurPath, ".zip");
+		CString fileNameW(fileName);
+		CString zipName(CurPath);
+		hz = CreateZip(zipName, 0);
 
-		fopen_s(&fp, CurPath, "a");
+		ZipAdd(hz, fileNameW, fileNameW);
+		
+		CloseZip(hz);
+		remove(fileName);
+	}
+	void openLoggerFile()
+	{
+		char fileName[50], timeValue[25];
+
+		tm timeVal = getTime(timeValue);
+		sprintf_s(fileName, "Application_%02d%02d%02d.log", timeVal.tm_hour, timeVal.tm_min, timeVal.tm_sec);
+		StrCpyA(CurFilePath, fileName);
+		fopen_s(&fp, fileName, "a");
 	}
 	void SetMinLogLevel(int minLogLevel)
 	{
@@ -97,15 +113,18 @@ public:
 		case 5:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
 		}
 		va_end(args);
-		if (ftell(fp) >= 10000000)
+		if (ftell(fp) >= 1000)
 		{
 			fclose(fp);
+			zipCurrentFile(CurFilePath);
 			openLoggerFile();
 		}
 	}
 
 	~CLogger()
 	{
+		log(LOGINFO, "Destructor called!!! %s", CurFilePath);
 		fclose(fp);
+		zipCurrentFile(CurFilePath);
 	}
 };
