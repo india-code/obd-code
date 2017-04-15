@@ -55,7 +55,7 @@ END_MESSAGE_MAP()
 
 CSpiceOBDDlg::CSpiceOBDDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_SYNWAY_OBD_DIALOG, pParent)
-	, m_SetMinLogLevel(0), aesEncryption("1234567891011121"), countFile(1)
+	, m_SetMinLogLevel(0), aesEncryption("1234567891011121")
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -116,21 +116,33 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 									// TODO: Add extra initialization here
-	logger.SetMinLogLevel(m_SetMinLogLevel); //Set initial minimum log level
-	if (!InitCtiBoard())  return false;
-	m_TrkChList.SetExtendedStyle(LVS_EX_GRIDLINES | LVS_EX_FULLROWSELECT);
-	CRect rect;
-	SystemParametersInfo(SPI_GETWORKAREA, 0, &rect, 0);
-	int screen_x_size = rect.Width();
-	int screen_y_size = rect.Height();
+	try {
+		logger.SetMinLogLevel(m_SetMinLogLevel); //Set initial minimum log level
+		if (!InitCtiBoard())  return false;
+		m_TrkChList.SetExtendedStyle(LVS_EX_GRIDLINES | LVS_EX_FULLROWSELECT);
+		CRect rect;
+		SystemParametersInfo(SPI_GETWORKAREA, 0, &rect, 0);
+		int screen_x_size = rect.Width();
+		int screen_y_size = rect.Height();
 
-	::SetWindowPos(m_hWnd, HWND_TOPMOST, 0, 0, screen_x_size, screen_y_size, SWP_NOZORDER);
+		::SetWindowPos(m_hWnd, HWND_TOPMOST, 0, 0, screen_x_size, screen_y_size, SWP_NOZORDER);
 
-	InitilizeDBConnection();
-	if (!InitilizeChannels()) return false;
-	InitUserDialingList();
+		InitilizeDBConnection();
+		if (!InitilizeChannels()) return false;
+		InitUserDialingList();
+	}
+	catch (...)
+	{
+		char errMsg1[100];
+		SsmGetLastErrMsg(errMsg1);
+		CString errMsg(errMsg1);
+		logger.log(LOGFATAL, "%s",  errMsg);
+		AfxMessageBox(errMsg);
+		PostQuitMessage(0);
+	}
 	//GetDBData();
 	SetTimer(1000, 2000, NULL);
+
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
@@ -498,14 +510,11 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 				<< ChInfo[i].CDRStatus.channel << "#" << tmpCmpId << "#\n";
 
 			//Check if CDR file is greater than 10 MB make a new one.
-			if (outfile.tellp() >= 10000000)
+		/*	if (outfile.tellp() >= 100)
 			{
 				outfile.close();
-				char fileName[50];
-				sprintf_s(fileName, "CDRInfo%d.txt", countFile);
-				outfile.open(fileName, std::ofstream::app);
-				countFile++;
-			}
+				openCDRLogFile();
+			}*/
 			//Insert Call records in DB
 			sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_calls(channel, campaign_id, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id) \
 				VALUES(%d, '%s', 'Idea PB', '%s', '%s', '%s#%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s')",
@@ -1324,112 +1333,175 @@ void CSpiceOBDDlg::ReadNumbersFromFiles()
 	//tempdata.phnumBuf.clear();
 }
 
+void CSpiceOBDDlg::openCDRLogFile()
+{
+	char CurPath[260];
+	char fileName[50];
+	char folderName[50];
+	char timeValue[25];
+
+	GetCurrentDirectoryA(200, CurPath);
+	StrCatA(CurPath, "\\CDRLogs");
+	if (!PathIsDirectoryA(CurPath))
+	{
+		CreateDirectoryA(CurPath, NULL);
+	}
+	tm timeVal = logger.getTime(timeValue);
+	sprintf_s(folderName, "\\CDRInfo_%04d%02d", timeVal.tm_year + 1900, timeVal.tm_mon + 1);
+	StrCatA(CurPath, folderName);
+
+	if (!PathIsDirectoryA(CurPath))
+	{
+		CreateDirectoryA(CurPath, NULL);
+	}
+	sprintf_s(fileName, "\\CDRInfo_%04d%02d%02d.txt", timeVal.tm_year + 1900, timeVal.tm_mon + 1, timeVal.tm_mday);
+
+	StrCatA(CurPath, fileName);
+
+	outfile.open(CurPath, std::ofstream::app);
+}
+
+void CSpiceOBDDlg::openConsentLogFile()
+{
+	char CurPath[260];
+	char fileName[50];
+	char folderName[50];
+	char timeValue[25];
+
+	GetCurrentDirectoryA(200, CurPath);
+	StrCatA(CurPath, "\\ConsentLogs");
+	if (!PathIsDirectoryA(CurPath))
+	{
+		CreateDirectoryA(CurPath, NULL);
+	}
+	tm timeVal = logger.getTime(timeValue);
+	sprintf_s(folderName, "\\ConsentInfo_%04d%02d", timeVal.tm_year + 1900, timeVal.tm_mon + 1);
+	StrCatA(CurPath, folderName);
+
+	if (!PathIsDirectoryA(CurPath))
+	{
+		CreateDirectoryA(CurPath, NULL);
+	}
+	sprintf_s(fileName, "\\ConsentInfo_%04d%02d%02d.txt", timeVal.tm_year + 1900, timeVal.tm_mon + 1, timeVal.tm_mday);
+
+	StrCatA(CurPath, fileName);
+
+	ConsentFile.open(CurPath, std::ofstream::app);
+}
 
 BOOL CSpiceOBDDlg::InitilizeChannels()
 {
-	//ReadNumbersFromFiles();
-	if (GetDBData() == TRUE)
-	{
-		//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
-		systemIpAddr = Utils::GetIPAdd();
-		outfile.open("CDRInfo.txt", std::ofstream::app);
-		ConsentFile.open("CorrectConsent.txt", std::ofstream::app);
-		//Initialization of channels on trunk-board
-		ChInfo = new CH_INFO[nTotalCh];
-
-		for (int i = 0; i < nTotalCh; i++)
+	try {
+		//ReadNumbersFromFiles();
+		if (GetDBData() == TRUE)
 		{
-			ChInfo[i].EnCalled = false;
-			ChInfo[i].rowTobeUpdated = false;
-			int chType = SsmGetChType(i);
-			if (chType == 11) //ISUP channel(China SS7 signaling ISUP)
-			{
-				if (SsmGetChState(i) == 0) //check idle
-				{
-					ChInfo[i].nStep = USER_IDLE;
-				}
-				else
-				{
-					//Set idle
-					SsmHangup(i);
-					ChInfo[i].nStep = USER_IDLE;
-				}
-			}
-			if (ChInfo[i].nStep == USER_IDLE)
-			{
-				ChInfo[i].CampaignID = -1;
-				StrCpyA(ChInfo[i].pPhoNumBuf, "");
-				StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
-				StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
-				StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
-				StrCpyA(ChInfo[i].CDRStatus.firstConsent, "");
-				StrCpyA(ChInfo[i].CDRStatus.secondConsent, "");
+			//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
+			systemIpAddr = Utils::GetIPAdd();
+			openCDRLogFile();
+			openConsentLogFile();
+			//Initialization of channels on trunk-board
+			ChInfo = new CH_INFO[nTotalCh];
 
-				for (size_t j = 1; j <= Campaigns.size(); j++)
+			for (int i = 0; i < nTotalCh; i++)
+			{
+				ChInfo[i].EnCalled = false;
+				ChInfo[i].rowTobeUpdated = false;
+				int chType = SsmGetChType(i);
+				if (chType == 11) //ISUP channel(China SS7 signaling ISUP)
 				{
-					if (i >= Campaigns.at(j).minCh && i <= Campaigns.at(j).maxCh)
+					if (SsmGetChState(i) == 0) //check idle
 					{
-						ChInfo[i].CampaignID = j;
-						if (!Campaigns.at(j).phnumBuf.empty())
+						ChInfo[i].nStep = USER_IDLE;
+					}
+					else
+					{
+						//Set idle
+						SsmHangup(i);
+						ChInfo[i].nStep = USER_IDLE;
+					}
+				}
+				if (ChInfo[i].nStep == USER_IDLE)
+				{
+					ChInfo[i].CampaignID = -1;
+					StrCpyA(ChInfo[i].pPhoNumBuf, "");
+					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
+					StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
+					StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
+					StrCpyA(ChInfo[i].CDRStatus.firstConsent, "");
+					StrCpyA(ChInfo[i].CDRStatus.secondConsent, "");
+
+					for (size_t j = 1; j <= Campaigns.size(); j++)
+					{
+						if (i >= Campaigns.at(j).minCh && i <= Campaigns.at(j).maxCh)
 						{
-							StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(j).phnumBuf.front().ani);
-							StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(j).phnumBuf.front().encryptedAni);
-							Campaigns.at(j).phnumBuf.erase(Campaigns.at(j).phnumBuf.begin());
-							logger.log(LOGINFO, "InitilizeChannels Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
-							if (!UpdatePhNumbersStatus(i))
+							ChInfo[i].CampaignID = j;
+							if (!Campaigns.at(j).phnumBuf.empty())
 							{
-								logger.log(LOGINFO, "InitilizeChannels Row not updated... channel number: %d", i);
+								StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(j).phnumBuf.front().ani);
+								StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(j).phnumBuf.front().encryptedAni);
+								Campaigns.at(j).phnumBuf.erase(Campaigns.at(j).phnumBuf.begin());
+								logger.log(LOGINFO, "InitilizeChannels Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
+								if (!UpdatePhNumbersStatus(i))
+								{
+									logger.log(LOGINFO, "InitilizeChannels Row not updated... channel number: %d", i);
+								}
+							}
+							//setting caller ID 
+							if (SsmSetTxCallerId(i, Campaigns.at(j).CLI) == -1)
+							{
+								getErrorResult(L" SsmSetTxCallerId");
+								return false;
 							}
 						}
-						//setting caller ID 
-						if (SsmSetTxCallerId(i, Campaigns.at(j).CLI) == -1)
-						{
-							getErrorResult(L" SsmSetTxCallerId");
-							return false;
-						}
 					}
+					StrCpyA(ChInfo[i].CDRStatus.reason, "");
+					StrCpyA(ChInfo[i].CDRStatus.status, "");
+					StrCpyA(ChInfo[i].CDRStatus.reason_code, "");
 				}
-				StrCpyA(ChInfo[i].CDRStatus.reason, "");
-				StrCpyA(ChInfo[i].CDRStatus.status, "");
-				StrCpyA(ChInfo[i].CDRStatus.reason_code, "");
 			}
-		}
-		//Loading wav file on different positions for all campaigns
-		char alias[10];
-		int index = 0;
-		for (size_t i = 1; i <= Campaigns.size(); i++)
-		{
-			char tempPath[255];
-			char fileName[16];
-			int j = 1;
-			StrCpyA(tempPath, "");
-			Campaigns.at(i).hasReachedThreshold = false;
-			while (true)
+			//Loading wav file on different positions for all campaigns
+			char alias[10];
+			int index = 0;
+			for (size_t i = 1; i <= Campaigns.size(); i++)
 			{
-				StrCpyA(tempPath, Campaigns.at(i).promptsPath);
-				sprintf_s(fileName, "%d.wav", j);
-				StrCatA(tempPath, fileName);
-				if (PathFileExistsA(tempPath))
+				char tempPath[255];
+				char fileName[16];
+				int j = 1;
+				StrCpyA(tempPath, "");
+				Campaigns.at(i).hasReachedThreshold = false;
+				while (true)
 				{
-					index = i * 10 + j;
-					sprintf_s(alias, "alias%d", index);
-					if (SsmLoadIndexData(index, alias, 7, tempPath, 0, -1) != 0)
+					StrCpyA(tempPath, Campaigns.at(i).promptsPath);
+					sprintf_s(fileName, "%d.wav", j);
+					StrCatA(tempPath, fileName);
+					if (PathFileExistsA(tempPath))
 					{
-						CString errMsg;
-						errMsg.Format(L"Load Index %d Error", index);
-						AfxMessageBox(errMsg);
-						PostQuitMessage(0);
+						index = i * 10 + j;
+						sprintf_s(alias, "alias%d", index);
+						if (SsmLoadIndexData(index, alias, 7, tempPath, 0, -1) != 0)
+						{
+							CString errMsg;
+							errMsg.Format(L"Load Index %d Error", index);
+							AfxMessageBox(errMsg);
+							PostQuitMessage(0);
+						}
+						Campaigns.at(i).loadedIndex[j] = index;
+						//logger.log(LOGINFO, "Path: %s, index: %d, alias: %s, total Index: %d", tempPath, Campaigns.at(i).loadedIndex[j], alias, SsmGetTotalIndexSeg());
+						j++;
 					}
-					Campaigns.at(i).loadedIndex[j] = index;
-					//logger.log(LOGINFO, "Path: %s, index: %d, alias: %s, total Index: %d", tempPath, Campaigns.at(i).loadedIndex[j], alias, SsmGetTotalIndexSeg());
-					j++;
-				}
-				else
-				{
-					break;
-				}
-			}//End While
-		}//End For
+					else
+					{
+						break;
+					}
+				}//End While
+			}//End For
+		}
+	}
+	catch (...)
+	{
+		char errMsg[100];
+		SsmGetLastErrMsg(errMsg);
+		logger.log(LOGERR, "On Initialize Channels :%s", errMsg);
 	}
 	return true;
 }
@@ -1437,10 +1509,18 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 {
 	// TODO: Add your message handler code here and/or call default
-
-	DoUserWork();
-	UpDateATrunkChListCtrl();
-
+	try
+	{
+		DoUserWork();
+		UpDateATrunkChListCtrl();
+	}
+	catch (...)
+	{
+		char errMsg[100];
+		SsmGetLastErrMsg(errMsg);
+		logger.log(LOGERR, "On Timers :%s", errMsg);
+		
+	}
 	CDialog::OnTimer(nIDEvent);
 }
 

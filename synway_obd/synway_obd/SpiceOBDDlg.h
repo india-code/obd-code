@@ -6,6 +6,7 @@
 #include "mysql.h"
 #include "shpa3api.h"
 #include "AESEncryption.h"
+
 #include "Logger.h"
 #include "Utils.h"
 #include <fstream>
@@ -126,7 +127,6 @@ public:
 	AESEncryption aesEncryption;
 	bool IsUpdate;
 	char *systemIpAddr;
-	int countFile;
 	ofstream outfile;
 	ofstream ConsentFile;
 	map<int, CampaignData> Campaigns;
@@ -146,6 +146,8 @@ public:
 	void LogErrorCodeAndMessage(int ch);
 	void UpDateATrunkChListCtrl();
 	void GetNextUserData();
+	void openCDRLogFile();
+	void openConsentLogFile();
 	void UpdateStatusAndPickNextRecords();
 	char* GetReleaseErrorReason(WORD code);
 	void HangupCall(int ch);

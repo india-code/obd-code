@@ -4,7 +4,7 @@
 
 enum LogLevel
 {
-	LOGTRACE  = 0,
+	LOGTRACE = 0,
 	LOGDEBUG,
 	LOGINFO,
 	LOGWARNING,
@@ -18,13 +18,13 @@ class CLogger {
 	int fileCounter;
 public:
 	tm getTime(char time_value[25]) {
-		struct tm			Time;
-		time_t				Timet;
+		struct tm                  Time;
+		time_t                     Timet;
 
-#ifdef _WIN32	/* Defined in Windows */  
-		struct _timeb	  Timeb; /* used to get milliseconds */
-#else			/* Defined in Unix	*/
-		struct timeb		Timeb;
+#ifdef _WIN32 /* Defined in Windows */  
+		struct _timeb   Timeb; /* used to get milliseconds */
+#else                /* Defined in Unix   */
+		struct timeb         Timeb;
 #endif
 
 		char TimeStr[50];
@@ -35,20 +35,43 @@ public:
 		time(&Timet);
 		localtime_s(&Time, &Timet);
 
-#ifdef _WIN32	/* Defined in Windows */  
+#ifdef _WIN32 /* Defined in Windows */  
 		_ftime_s(&Timeb); /* needed to get the milliseconds */
-#else			/* Defined in Unix	 */  
+#else                /* Defined in Unix   */  
 		ftime(&Timeb);
 #endif
 		sprintf_s(TimeStr, "%02d/%02d/%04d %02d:%02d:%02d.%03d ", Time.tm_mday, Time.tm_mon + 1, Time.tm_year + 1900, Time.tm_hour, Time.tm_min, Time.tm_sec, Timeb.millitm);
 		StrCpyA(time_value, TimeStr);
 		return Time;
 	}
-	CLogger(): fileCounter(1)
+	CLogger()
+	{
+		openLoggerFile();
+	}
+	void openLoggerFile()
 	{
 		char CurPath[260];
+		char fileName[50];
+		char folderName[50];
+		char timeValue[25];
+
 		GetCurrentDirectoryA(200, CurPath);
-		StrCatA(CurPath, "\\Application.log");
+		StrCatA(CurPath, "\\ApplicationLogs");
+		if (!PathIsDirectoryA(CurPath))
+		{
+			CreateDirectoryA(CurPath, NULL);
+		}
+		tm timeVal = getTime(timeValue);
+		sprintf_s(folderName, "\\Application_%04d%02d%02d", timeVal.tm_year + 1900, timeVal.tm_mon + 1, timeVal.tm_mday);
+		StrCatA(CurPath, folderName);
+
+		if (!PathIsDirectoryA(CurPath))
+		{
+			CreateDirectoryA(CurPath, NULL);
+		}
+		sprintf_s(fileName, "\\Application_%02d%02d%02d.log", timeVal.tm_hour, timeVal.tm_min, timeVal.tm_sec);
+
+		StrCatA(CurPath, fileName);
 
 		fopen_s(&fp, CurPath, "a");
 	}
@@ -61,7 +84,7 @@ public:
 		char* time_value;
 		int log_level = 0;
 		va_list args;
-		
+
 		time_value = (char*)malloc(26 * sizeof(char));
 		getTime(time_value);
 		va_start(args, format);
@@ -77,10 +100,7 @@ public:
 		if (ftell(fp) >= 10000000)
 		{
 			fclose(fp);
-			char fileName[50];
-			sprintf_s(fileName, "Application%d.txt", fileCounter);
-			fopen_s(&fp, fileName, "a");
-			fileCounter++;
+			openLoggerFile();
 		}
 	}
 
