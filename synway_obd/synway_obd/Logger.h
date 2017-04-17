@@ -113,7 +113,7 @@ public:
 		case 5:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
 		}
 		va_end(args);
-		if (ftell(fp) >= 1000)
+		if (ftell(fp) >= 10000000)
 		{
 			fclose(fp);
 			zipCurrentFile(CurFilePath);
