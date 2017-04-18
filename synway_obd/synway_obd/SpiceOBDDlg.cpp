@@ -133,7 +133,7 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 	}
 	catch (...)
 	{
-		char errMsg1[100];
+		char errMsg1[256];
 		SsmGetLastErrMsg(errMsg1);
 		CString errMsg(errMsg1);
 		logger.log(LOGFATAL, "%s",  errMsg);
@@ -168,7 +168,7 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 
 	port = GetPrivateProfileIntA("Database", "Port", 3306, InitDBSettings);
 	nTotalCh = GetPrivateProfileIntA("Database", "TotalChannelsCount", 90, InitDBSettings);
-	logger.log(LOGINFO, "host: %s, username: %s, password: %s, dbname: %s, port: %d, TotalChannelsCount: ", host, username, password, DBName, port, nTotalCh);
+	logger.log(LOGINFO, "host: %s, username: %s, password: %s, dbname: %s, port: %d, TotalChannelsCount: %d", host, username, password, DBName, port, nTotalCh);
 
 	if (mysql_real_connect(conn, host, username, password, DBName, port, NULL, 0) == 0)
 	{
@@ -503,7 +503,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			
 
 			int tmpCmpId = ChInfo[i].CampaignID;
-			outfile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani 
+			outfile << "IDEA_HR" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani 
 				<< "#" << ChInfo[i].CDRStatus.encrypted_ani << "#" << call_time << "#"<<answer_time << "#" << end_time << "#" << ChInfo[i].CDRStatus.callPatch_duration 
 				<< "#" << ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.total_duration <<"#" << ChInfo[i].CDRStatus.status << "#" 
 				<< ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#" 
@@ -517,7 +517,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			}*/
 			//Insert Call records in DB
 			sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_calls(channel, campaign_id, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id) \
-				VALUES(%d, '%s', 'Idea PB', '%s', '%s', '%s#%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s')",
+				VALUES(%d, '%s', 'Idea HR', '%s', '%s', '%s#%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s')",
 				ChInfo[i].CDRStatus.channel, Campaigns.at(tmpCmpId).campaign_id, ChInfo[i].CDRStatus.ani, Campaigns.at(tmpCmpId).CLI, ChInfo[i].CDRStatus.dtmf, ChInfo[i].CDRStatus.dtmf2, ChInfo[i].CDRStatus.answer_duration,
 				StrCmpA(ChInfo[i].CDRStatus.status, "SUCCESS") == 0 ? 1 : 0, ChInfo[i].CDRStatus.callPatch_duration, dateVal, call_time, answer_time, end_time, ChInfo[i].CDRStatus.reason_code,
 				ChInfo[i].CDRStatus.total_duration, ChInfo[i].CDRStatus.reason, ChInfo[i].CDRStatus.encrypted_ani, ChInfo[i].CDRStatus.ani, timeVal);
@@ -532,7 +532,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			//logging correct consent recieved
 			if (StrCmpA(ChInfo[i].CDRStatus.firstConsent, "") && StrCmpA(ChInfo[i].CDRStatus.secondConsent, ""))
 			{
-				ConsentFile << "IDEA_PUNJAB" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].pPhoNumBuf
+				ConsentFile << "IDEA_HR" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].pPhoNumBuf
 					<< "#" << ChInfo[i].CDRStatus.firstConsent << "#" << ChInfo[i].CDRStatus.secondConsent<< "#\n";
 			}
 			StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
@@ -762,9 +762,9 @@ void getErrorResult(LPCTSTR  ApiName)
 
 void CSpiceOBDDlg::LogErrorCodeAndMessage(int ch)
 {
-	//sprintf_s(ChInfo[ch].CDRStatus.reason_code, "%d", SsmGetLastErrCode()); //get error code
-	//SsmGetLastErrMsg(ChInfo[ch].CDRStatus.reason); //get dial failure error message
-	//logger.log(LOGERR, "Error code: %s And Error Reason: %s on channel Number: %d , phone number: %s", ChInfo[ch].CDRStatus.reason_code, ChInfo[ch].CDRStatus.reason, ch, ChInfo[ch].pPhoNumBuf);
+	sprintf_s(ChInfo[ch].CDRStatus.reason_code, "%d", SsmGetLastErrCode()); //get error code
+	SsmGetLastErrMsg(ChInfo[ch].CDRStatus.reason); //get dial failure error message
+	logger.log(LOGERR, "Error code: %s And Error Reason: %s on channel Number: %d , phone number: %s", ChInfo[ch].CDRStatus.reason_code, ChInfo[ch].CDRStatus.reason, ch, ChInfo[ch].pPhoNumBuf);
 }
 
 void CSpiceOBDDlg::HangupCall(int ch)
@@ -1499,7 +1499,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 	}
 	catch (...)
 	{
-		char errMsg[100];
+		char errMsg[256];
 		SsmGetLastErrMsg(errMsg);
 		logger.log(LOGERR, "On Initialize Channels :%s", errMsg);
 	}
@@ -1516,7 +1516,7 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 	}
 	catch (...)
 	{
-		char errMsg[100];
+		char errMsg[256];
 		SsmGetLastErrMsg(errMsg);
 		logger.log(LOGERR, "On Timers :%s", errMsg);
 		
