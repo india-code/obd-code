@@ -119,6 +119,7 @@ public:
 			zipCurrentFile(CurFilePath);
 			openLoggerFile();
 		}
+		fflush(fp);
 	}
 
 	~CLogger()

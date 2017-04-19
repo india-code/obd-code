@@ -100,7 +100,7 @@ typedef struct
 	vector<pnNumWithEncryptedAni> phnumBuf;
 	char CLI[31];
 	int channelsAllocated;
-	BOOL hasReachedThreshold;
+	//BOOL hasReachedThreshold;
 	char promptsPath[255];
 	char campaign_id[255];
 	int loadedIndex[10];
