@@ -37,7 +37,7 @@ enum OBD_DIAL_PLAN
 	Informative = 1,
 	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
 	AcquisitionalOBDWithout1stConsent,
-	AcquisitionalOBDWith1stConsent /*1: welcome, 2: No input, 3: Thanks, 4: wrong*/
+	AcquisitionalOBDWith1stConsent /*1: welcome, 2: No input again, 3: Thanks*/
 };
 typedef struct
 {

@@ -141,7 +141,7 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 		PostQuitMessage(0);
 	}
 	//GetDBData();
-	SetTimer(1000, 2000, NULL);
+	SetTimer(1000, 100, NULL);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -525,7 +525,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 {
 	int query_state;
-	char queryStr[256];
+//	char queryStr[256];
 	char queryStrInsert[1024];
 	for (int i = 0; i < nTotalCh; i++)
 	{
@@ -566,7 +566,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 				<< "#" << ChInfo[i].CDRStatus.encrypted_ani << "#" << call_time << "#" << answer_time << "#" << end_time << "#" << ChInfo[i].CDRStatus.callPatch_duration
 				<< "#" << ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.total_duration << "#" << ChInfo[i].CDRStatus.status << "#"
 				<< ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#"
-				<< ChInfo[i].CDRStatus.channel << "#" << tmpCmpId << "#" << endl;
+				<< ChInfo[i].CDRStatus.channel << "#" << Campaigns.at(tmpCmpId).campaign_id << "#" << endl;
 
 			//Check if CDR file is greater than 10 MB make a new one.
 		/*	if (outfile.tellp() >= 100)
@@ -592,12 +592,12 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			if (StrCmpA(ChInfo[i].CDRStatus.firstConsent, "") && StrCmpA(ChInfo[i].CDRStatus.secondConsent, ""))
 			{
 				ConsentFile << "IDEA_HR" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].pPhoNumBuf
-					<< "#" << ChInfo[i].CDRStatus.firstConsent << "#" << ChInfo[i].CDRStatus.secondConsent << "#" << endl;
+					<< "#" << ChInfo[i].CDRStatus.firstConsent << "#" << ChInfo[i].CDRStatus.secondConsent << "#" << Campaigns.at(tmpCmpId).campaign_id << "#" << endl;
 			}
 			if (Campaigns.at(tmpCmpId).obdDialPlan == AcquisitionalOBDWith1stConsent && StrCmpA(ChInfo[i].CDRStatus.firstConsent, ""))
 			{
 				ConsentFile << "IDEA_HR" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].pPhoNumBuf
-					<< "#" << ChInfo[i].CDRStatus.firstConsent << "#" << endl;
+					<< "#" << ChInfo[i].CDRStatus.firstConsent <<"#" << Campaigns.at(tmpCmpId).campaign_id << "#" << endl;
 			}
 			StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
 			StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
@@ -902,6 +902,7 @@ void CSpiceOBDDlg::DoUserWork()
 					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tempCampId).phnumBuf.front().ani);
 					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tempCampId).phnumBuf.front().encryptedAni);
 					m_TrkChList.SetItemText(i, 4, tempStr2);
+					delete Campaigns.at(tempCampId).phnumBuf.front().ani;
 					Campaigns.at(tempCampId).phnumBuf.erase(Campaigns.at(tempCampId).phnumBuf.begin());
 					logger.log(LOGINFO, "DoUserWork Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
 					//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
@@ -973,7 +974,7 @@ void CSpiceOBDDlg::DoUserWork()
 					if (ChInfo[i].DialPlanStatus != Informative)
 					{
 						ChInfo[i].ConsentState = 1;
-						SsmSetWaitDtmfExA(i, 18000, 1, "12", true); //set the DTMF termination character
+						SsmSetWaitDtmfExA(i, 18000, 1, "0123456789*#", true); //set the DTMF termination character
 					}
 				}
 				break;
@@ -1188,7 +1189,7 @@ void CSpiceOBDDlg::DoUserWork()
 								ChInfo[i].ConsentState = 2;
 								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 								SsmPlayIndexString(i, CampID);
-								SsmSetWaitDtmfExA(i, 18000, 1, "1", true);
+								SsmSetWaitDtmfExA(i, 18000, 1, "0123456789*#", true);
 							}
 							else //Wrong input
 							{

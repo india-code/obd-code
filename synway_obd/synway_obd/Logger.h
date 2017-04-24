@@ -124,7 +124,7 @@ public:
 
 	~CLogger()
 	{
-		log(LOGINFO, "Destructor called!!! %s", CurFilePath);
+		//log(LOGINFO, "Destructor called!!! %s", CurFilePath);
 		fclose(fp);
 		zipCurrentFile(CurFilePath);
 	}
