@@ -125,6 +125,7 @@ public:
 	static int OffSet, row_count, getAndUpdateRowCount;
 	AESEncryption aesEncryption;
 	bool IsUpdate;
+	BOOL IsStartDialling;
 	char *systemIpAddr;
 	ofstream outfile;
 	ofstream ConsentFile;
@@ -177,4 +178,6 @@ protected:
 public:
 	CListCtrl m_TrkChList;
 	int m_SetMinLogLevel;
+	afx_msg void OnBnClickedDiallingStart();
+	afx_msg void OnBnClickedDiallingStop();
 };

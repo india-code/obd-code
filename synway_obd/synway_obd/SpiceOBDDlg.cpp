@@ -81,6 +81,8 @@ BEGIN_MESSAGE_MAP(CSpiceOBDDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_INFO, &CSpiceOBDDlg::OnBnClickedLogLevel)
 	ON_BN_CLICKED(IDC_ERROR, &CSpiceOBDDlg::OnBnClickedLogLevel)
 	ON_BN_CLICKED(IDC_FATAL, &CSpiceOBDDlg::OnBnClickedLogLevel)
+	ON_BN_CLICKED(IDC_DIALLING_START, &CSpiceOBDDlg::OnBnClickedDiallingStart)
+	ON_BN_CLICKED(IDC_DIALLING_STOP, &CSpiceOBDDlg::OnBnClickedDiallingStop)
 END_MESSAGE_MAP()
 
 
@@ -141,7 +143,7 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 		PostQuitMessage(0);
 	}
 	//GetDBData();
-	SetTimer(1000, 100, NULL);
+	SetTimer(1000, 200, NULL);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -218,8 +220,8 @@ BOOL CSpiceOBDDlg::GetDBData()
 	//call to decrypt values read from DB
 	int query_state;
 	char queryStr[256];
-
-	StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type from tbl_campaign_master");
+	
+	StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type from tbl_campaign_master where campaign_status = 1 and base_status = 1 and prompts_status = 1");
 
 	//logger.log(LOGINFO, queryStr);
 
@@ -235,6 +237,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 
 	CampaignData tempdata;
 	int i = 1, channelsOccupied = -1;
+	Campaigns.clear();
 	while ((row = mysql_fetch_row(res)) != NULL)
 	{
 		StrCpyA(tempdata.campaign_id, row[0]);
@@ -545,11 +548,17 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
 
 			localtime_s(&ct, &ChInfo[i].CDRStatus.call_time);
-			strftime(call_time, sizeof(call_time), "%X", &ct);
+			if (strftime(call_time, sizeof(call_time), "%X", &ct) == 0)
+			{
+				StrCpyA(call_time, "");
+			}
 
 			if (ChInfo[i].CDRStatus.answer_time != 0) {
 				localtime_s(&at, &ChInfo[i].CDRStatus.answer_time);
-				strftime(answer_time, sizeof(answer_time), "%X", &at);
+				if (strftime(answer_time, sizeof(answer_time), "%X", &at) == 0)
+				{
+					StrCpyA(answer_time, "");
+				}
 			}
 			else
 			{
@@ -557,7 +566,10 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			}
 
 			localtime_s(&et, &ChInfo[i].CDRStatus.end_time);
-			strftime(end_time, sizeof(end_time), "%X", &et);
+			if (strftime(end_time, sizeof(end_time), "%X", &et) == 0)
+			{
+				StrCpyA(end_time, "");
+			}
 
 
 			int tmpCmpId = ChInfo[i].CampaignID;
@@ -896,7 +908,7 @@ void CSpiceOBDDlg::DoUserWork()
 			if (ChInfo[i].lineState == S_CALL_STANDBY && ChInfo[i].EnCalled == false)
 			{
 				//Copy phone Numbers to auto dial
-				if (!Campaigns.at(tempCampId).phnumBuf.empty())
+				if (!Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling)
 				{
 					CString tempStr2(Campaigns.at(tempCampId).phnumBuf.front().ani);
 					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tempCampId).phnumBuf.front().ani);
@@ -1439,6 +1451,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 		{
 			//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
 			systemIpAddr = Utils::GetIPAdd();
+			IsStartDialling = false;
 			openCDRLogFile();
 			openConsentLogFile();
 			//Initialization of channels on trunk-board
@@ -1589,4 +1602,18 @@ void CSpiceOBDDlg::OnDestroy()
 	ConsentFile.close();
 	SsmCloseCti();
 	CloseDBConn();
+}
+
+void CSpiceOBDDlg::OnBnClickedDiallingStart()
+{
+	// TODO: Add your control notification handler code here
+	IsStartDialling = true;
+	 
+}
+
+
+void CSpiceOBDDlg::OnBnClickedDiallingStop()
+{
+	// TODO: Add your control notification handler code here
+	IsStartDialling = false;
 }
