@@ -169,8 +169,8 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	GetPrivateProfileStringA("Database", "password", "sdl@1234", password, 255, InitDBSettings);
 
 	port = GetPrivateProfileIntA("Database", "Port", 3306, InitDBSettings);
-	nTotalCh = GetPrivateProfileIntA("Database", "TotalChannelsCount", 90, InitDBSettings);
-	logger.log(LOGINFO, "host: %s, username: %s, password: %s, dbname: %s, port: %d, TotalChannelsCount: %d", host, username, password, DBName, port, nTotalCh);
+	//nTotalCh = GetPrivateProfileIntA("Database", "TotalChannelsCount", 90, InitDBSettings);
+	logger.log(LOGINFO, "host: %s, username: %s, password: %s, dbname: %s, port: %d", host, username, password, DBName, port);
 
 	if (mysql_real_connect(conn, host, username, password, DBName, port, NULL, 0) == 0)
 	{
@@ -221,7 +221,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 	int query_state;
 	char queryStr[256];
 	
-	StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type from tbl_campaign_master where campaign_status = 1 and base_status = 1 and prompts_status = 1");
+	StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type, circle, zone from tbl_campaign_master where campaign_status = 1 and base_status = 1 and prompts_status = 1");
 
 	//logger.log(LOGINFO, queryStr);
 
@@ -237,15 +237,25 @@ BOOL CSpiceOBDDlg::GetDBData()
 
 	CampaignData tempdata;
 	int i = 1, channelsOccupied = -1;
-	Campaigns.clear();
+	
+    StrCpyA(circle, "");
+	StrCpyA(zone, "");
+
 	while ((row = mysql_fetch_row(res)) != NULL)
 	{
 		StrCpyA(tempdata.campaign_id, row[0]);
 		StrCpyA(tempdata.CLI, row[1]);
 		tempdata.channelsAllocated = atoi(row[2]);
-		StrCpyA(tempdata.promptsPath, row[3]);
+		StrCpyA(tempdata.promptsDirectory, row[3]);
 		tempdata.obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
-
+		//copying circle and zone to the global variables
+		if (!StrCmpA(circle, "") && !StrCmpA(zone, ""))
+		{
+			StrCpyA(circle, row[5]);
+			StrCpyA(zone, row[6]);
+		}
+		
+		//Get out dialer numbers 5 times to the allocated channel numbers to the campaign
 		sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d limit %d", row[0], 0, (5 * tempdata.channelsAllocated));
 
 		//logger.log(LOGINFO, queryStr);
@@ -273,6 +283,28 @@ BOOL CSpiceOBDDlg::GetDBData()
 		i++;
 		tempdata.phnumBuf.clear();
 	}
+	//get total ports and cg ports
+	sprintf_s(queryStr, "select total_ports, cgport from tbl_port_manager where zone = '%s' and circle = '%s'", zone, circle);
+	logger.log(LOGINFO, "Select ports query:  %s", queryStr);
+	query_state = mysql_query(conn, queryStr);
+
+	if (query_state != 0)
+	{
+		CString err(mysql_error(conn));
+		AfxMessageBox(err);
+	}
+
+	MYSQL_RES * resPhBuf = mysql_store_result(conn);
+	MYSQL_ROW rowPhBuf;
+	while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
+	{
+		int totalch = atoi(rowPhBuf[0]);
+		int cgports = atoi(rowPhBuf[1]);
+		nTotalCh = totalch + cgports;
+		nIVRMinCh = totalch;
+		nIVRMaxCh = nTotalCh;
+	}
+	logger.log(LOGINFO, "total Ports: %d, minIvrCh: %d", nTotalCh, nIVRMinCh);
 	return true;
 }
 
@@ -300,7 +332,7 @@ BOOL CSpiceOBDDlg::UpdateDBData(/*int chState*/)
 		int i = 0;
 		for (i = 0; i < nTotalCh; i++)
 		{
-			if (ChInfo[i].rowTobeUpdated == true && countNumbers > 1)
+			if (ChInfo[i].rowTobeUpdated == true && countNumbers  > 1)
 			{
 				char tempStr[1024];
 				sprintf_s(tempStr, "'%s', ", ChInfo[i].pPhoNumBuf);
@@ -493,7 +525,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 				char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
 				Campaigns.at(tmpCmpId).phnumBuf.push_back({ DecryptedVal, rowPhBuf[0] });
 			}
-			logger.log(LOGINFO, "vector size loaded from DB : %d for campaign: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
+			//logger.log(LOGINFO, "vector size loaded from DB : %d for campaign: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
 			/*if (Campaigns.at(tmpCmpId).phnumBuf.size() <= (2 * Campaigns.at(tmpCmpId).channelsAllocated))
 			{
 			Campaigns.at(tmpCmpId).hasReachedThreshold = true;
@@ -762,12 +794,12 @@ HCURSOR CSpiceOBDDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-int CSpiceOBDDlg::GetAnIdleChannel() // find an idle trunk channel
+int CSpiceOBDDlg::GetAnIdleChannel() // Find an idle trunk channel for IVR call Patchup
 {
 	int i;
-	for (i = 0; i < nTotalCh; i++)
+	for (i = nIVRMinCh; i < nIVRMaxCh; i++)
 	{
-		if (!ChInfo[i].InUse && ChInfo[i].EnCalled) break;
+		if (!ChInfo[i].InUse && ChInfo[i].isIVRChannel) break;
 	}
 
 	if (i == nTotalCh) return -1;
@@ -790,13 +822,13 @@ void CSpiceOBDDlg::LogErrorCodeAndMessage(int ch)
 {
 	sprintf_s(ChInfo[ch].CDRStatus.reason_code, "%d", SsmGetLastErrCode()); //get error code
 	SsmGetLastErrMsg(ChInfo[ch].CDRStatus.reason); //get dial failure error message
-	logger.log(LOGERR, "Error code: %s And Error Reason: %s on channel Number: %d , phone number: %s", ChInfo[ch].CDRStatus.reason_code, ChInfo[ch].CDRStatus.reason, ch, ChInfo[ch].pPhoNumBuf);
+	logger.log(LOGINFO, "Error code: %s And Error Reason: %s on channel Number: %d , phone number: %s", ChInfo[ch].CDRStatus.reason_code, ChInfo[ch].CDRStatus.reason, ch, ChInfo[ch].pPhoNumBuf);
 }
 
 void CSpiceOBDDlg::HangupCall(int ch)
 {
 	SsmClearRxDtmfBuf(ch);
-	SsmStopPlayIndex(ch);
+	SsmStopPlay(ch);
 	SsmHangup(ch);
 	ChInfo[ch].EnCalled = true;
 	IsUpdate = true;
@@ -806,11 +838,17 @@ void CSpiceOBDDlg::HangupCall(int ch)
 	if (StrCmpA(ChInfo[ch].CDRStatus.reason_code, "") == 0) { char errorcode[8]; sprintf_s(errorcode, "%d", SsmGetLastErrCode()); StrCpyA(ChInfo[ch].CDRStatus.reason_code, errorcode); }
 }
 
+void CSpiceOBDDlg::HangupIVRCall(int ch)
+{
+	SsmHangup(ch);
+	ChInfo[ch].InUse = false;
+}
+
 char* CSpiceOBDDlg::GetReleaseErrorReason(WORD errorCode)
 {
 	switch (errorCode)
 	{
-	case 0: return "answered"; break;
+	case 0: return "Unknown reason"; break;
 	case 1: return "Unallocated Number"; break;
 	case 2: return "No Route To Specific Transit Network"; break;
 	case 3: return "No Route To Destination"; break;
@@ -887,7 +925,7 @@ void CSpiceOBDDlg::DoUserWork()
 {
 	int nResult, nDirection;
 	CString tempPhoneNum;
-	char CampID[7];
+//	char CampID[7];
 	int tempCampId;
 	IsUpdate = false;
 	WORD releaseCode;
@@ -900,6 +938,7 @@ void CSpiceOBDDlg::DoUserWork()
 		if (nResult == -1 || nDirection < 1) continue;
 		tempCampId = ChInfo[i].CampaignID;
 		if (tempCampId == -1) continue;
+		if (ChInfo[i].isIVRChannel) continue;
 
 		switch (ChInfo[i].nStep)
 		{
@@ -947,7 +986,7 @@ void CSpiceOBDDlg::DoUserWork()
 			}
 			if (ChInfo[i].lineState == S_CALL_PENDING)
 			{
-				SsmStopPlayIndex(i);
+				SsmStopPlay(i);
 				SsmClearRxDtmfBuf(i);
 				SsmHangup(i);
 				ChInfo[i].nStep = USER_IDLE;
@@ -967,26 +1006,33 @@ void CSpiceOBDDlg::DoUserWork()
 			case DIAL_VOICE:
 			case DIAL_VOICEF1:
 			case DIAL_VOICEF2:
-				sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[1]);
+				//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[1]);
 				//logger.log(LOGINFO, "Camp Id: %s", CampID);
 				StrCpyA(ChInfo[i].CDRStatus.status, "SUCCESS");
 				StrCpyA(ChInfo[i].CDRStatus.reason, "Answered");
 				//StrCpyA(ChInfo[i].CDRStatus.reason_code, "7");
 				ChInfo[i].CDRStatus.answer_time = time(0);
-				if (SsmPlayIndexString(i, CampID) == -1)
+				logger.log(LOGINFO, "file to be played: %s", Campaigns.at(tempCampId).promptsPath[1]);
+				if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[1], 7, 0, -1) == -1)
 				{
 					LogErrorCodeAndMessage(i);
 					HangupCall(i);
 				}
 				else
 				{
-					//logger.log(LOGINFO, "Call picked up channel: %d, phone number: %s", i, ChInfo[i].pPhoNumBuf);
+					logger.log(LOGINFO, "Call picked up channel: %d, phone number: %s", i, ChInfo[i].pPhoNumBuf);
 					ChInfo[i].nStep = USER_TALKING;
 					ChInfo[i].DialPlanStatus = Campaigns.at(tempCampId).obdDialPlan;
 					if (ChInfo[i].DialPlanStatus != Informative)
 					{
 						ChInfo[i].ConsentState = 1;
-						SsmSetWaitDtmfExA(i, 18000, 1, "0123456789*#", true); //set the DTMF termination character
+						int pnFormat; long pnTime;
+						if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+						{
+							//logger.log(LOGINFO, "File length: %ld ", pnTime);
+							WORD wTimeOut = pnTime + 5000;
+							SsmSetWaitDtmfExA(i, wTimeOut, 1, "0123456789*#", true); //set the DTMF termination character
+						}
 					}
 				}
 				break;
@@ -1053,29 +1099,53 @@ void CSpiceOBDDlg::DoUserWork()
 						{
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
 							{
-								SsmStopPlayIndex(i);
+								//SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 3;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								SsmPlayIndexString(i, CampID);
-								SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+								int pnFormat; long pnTime;
+								if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+								{
+									WORD wTimeOut = pnTime + 5000;
+									SsmSetWaitDtmfExA(i, wTimeOut, 1, "0123456789*#", true); //set the DTMF termination character
+								}
 								StrCpyA(ChInfo[i].CDRStatus.firstConsent, ChInfo[i].CDRStatus.dtmf); //copying correct input only.
 							}
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No Input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 2;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-								SsmPlayIndexString(i, CampID);
-								SsmSetWaitDtmfExA(i, 18000, 1, "1", true);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[2], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+								int pnFormat; long pnTime;
+								if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+								{
+									WORD wTimeOut = pnTime + 5000;
+									SsmSetWaitDtmfExA(i, wTimeOut, 1, "0123456789*#", true); //set the DTMF termination character
+								}
+								//SsmSetWaitDtmfExA(i, 18000, 1, "1", true);
 							}
 							else //Wrong input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 4;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 								//SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
 							}
 						}
@@ -1089,28 +1159,46 @@ void CSpiceOBDDlg::DoUserWork()
 						{
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 3;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								SsmPlayIndexString(i, CampID);
-								SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+								int pnFormat; long pnTime;
+								if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+								{
+									WORD wTimeOut = pnTime + 5000;
+									SsmSetWaitDtmfExA(i, wTimeOut, 1, "0123456789*#", true); //set the DTMF termination character
+								}
+								//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								StrCpyA(ChInfo[i].CDRStatus.firstConsent, ChInfo[i].CDRStatus.dtmf); //copying correct input only.
 							}
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 4;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 							}
 							else //Wrong input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 4;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 							}
 						}
 					}
@@ -1123,29 +1211,258 @@ void CSpiceOBDDlg::DoUserWork()
 						{
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf2, "9") == 0) //Right Input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 4;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[5]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[5]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[5], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 								StrCpyA(ChInfo[i].CDRStatus.secondConsent, ChInfo[i].CDRStatus.dtmf2); //copying correct input only.
 							}
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf2, "") == 0) //No input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 4;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 							}
 							else //Wrong input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 4;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 							}
 						}
+					}
+					break;
+				case 4:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					if (ChInfo[i].mediaState >= 1)
+					{
+						HangupCall(i);
+					}
+					break;
+				default:
+					break;
+				}
+				break;
+			case AcquisitionalOBDWith1stAnd2ndIVRConsent:
+				switch (ChInfo[i].ConsentState) {
+				case 1:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					//logger.log(LOGINFO, "Media state: %d, ph Number: %s", ChInfo[i].mediaState, ChInfo[i].pPhoNumBuf);
+					if (ChInfo[i].mediaState >= 0)
+					{
+						//StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
+						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
+						{
+							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+							{
+								SsmStopPlay(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 3;
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+								ChInfo[i].IVRChannelNumber = GetAnIdleChannel();
+								if (SsmSetTxCallerId(ChInfo[i].IVRChannelNumber, ChInfo[i].pPhoNumBuf) == -1)
+								{
+									getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
+								}
+								//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
+								if (SsmAutoDial(ChInfo[i].IVRChannelNumber, "520622315073") == -1)
+								{
+									LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
+									HangupIVRCall(ChInfo[i].IVRChannelNumber);
+								}
+								ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
+								logger.log(LOGINFO, "CLI to IVR: %s, DNIS: 520622315073", ChInfo[i].pPhoNumBuf);
+								//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+							}
+							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No Input
+							{
+								SsmStopPlay(i);
+								ChInfo[i].ConsentState = 2;
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[2], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+								int pnFormat; long pnTime;
+								if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+								{
+									WORD wTimeOut = pnTime + 5000;
+									SsmSetWaitDtmfExA(i, wTimeOut, 1, "0123456789*#", true); //set the DTMF termination character
+								}
+								//SsmSetWaitDtmfExA(i, 18000, 1, "1", true);
+							}
+							else //Wrong input
+							{
+								SsmStopPlay(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 4;
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+								//SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
+							}
+						}
+					}
+					break;
+				case 2:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					if (ChInfo[i].mediaState >= 0)
+					{
+						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
+						{
+							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+							{
+								SsmStopPlay(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 3;
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+								ChInfo[i].IVRChannelNumber = GetAnIdleChannel();
+								if (SsmSetTxCallerId(ChInfo[i].IVRChannelNumber, ChInfo[i].pPhoNumBuf) == -1)
+								{
+									getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
+								}
+								//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
+								if (SsmAutoDial(ChInfo[i].IVRChannelNumber, "520622315073") == -1)
+								{
+									LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
+									HangupIVRCall(ChInfo[i].IVRChannelNumber);
+									HangupCall(i);
+								}
+								ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
+								logger.log(LOGINFO, "CLI to IVR: %s, DNIS: 520622315073", ChInfo[i].pPhoNumBuf);
+								//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+							}
+							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No input
+							{
+								SsmStopPlay(i);
+								ChInfo[i].ConsentState = 4;
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+							}
+							else //Wrong input
+							{
+								SsmStopPlay(i);
+								SsmClearRxDtmfBuf(i);
+								ChInfo[i].ConsentState = 4;
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+							}
+						}
+					}
+					break;
+				case 3:
+					switch (SsmChkAutoDial(ChInfo[i].IVRChannelNumber))
+					{
+					case DIAL_VOICE:
+					case DIAL_VOICEF1:
+					case DIAL_VOICEF2:
+						SsmStopPlay(i);
+						//SsmStopSendTone(i);
+						if (SsmTalkWith(i, ChInfo[i].IVRChannelNumber) == -1)
+						{
+							char  errMsg[256];
+							SsmGetLastErrMsg(errMsg);
+							logger.log(LOGERR, "Call Patchup failed between Ch: %d and ivr Ch: %d, Reason: %s", i, ChInfo[i].IVRChannelNumber, errMsg);
+							SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
+							HangupCall(i);
+							HangupIVRCall(ChInfo[i].IVRChannelNumber);
+						}
+						ChInfo[i].ConsentState = 5;
+						logger.log(LOGINFO, "Call PatchedUp between Ch: %d and ivr Ch: %d", i, ChInfo[i].IVRChannelNumber);
+
+						break;
+					case DIAL_FAILURE:
+					case DIAL_NO_DIALTONE:
+					case DIAL_ECHO_NOVOICE:
+					case DIAL_INVALID_PHONUM:
+					case DIAL_BUSYTONE:
+					case DIAL_NOVOICE:
+					case DIAL_NOANSWER:
+						//ChInfo[i].CDRStatus.end_time = time(0);
+						releaseCode = SsmGetReleaseReason(ChInfo[i].IVRChannelNumber);
+						StrCpyA(ChInfo[ChInfo[i].IVRChannelNumber].CDRStatus.status, "FAIL");
+						sprintf_s(ChInfo[ChInfo[i].IVRChannelNumber].CDRStatus.reason_code, "%hu", releaseCode);
+						StrCpyA(ChInfo[ChInfo[i].IVRChannelNumber].CDRStatus.reason, GetReleaseErrorReason(releaseCode));
+						HangupCall(i);
+						HangupIVRCall(ChInfo[i].IVRChannelNumber);
+						logger.log(LOGINFO, "patch up failed with reason: %s", ChInfo[ChInfo[i].IVRChannelNumber].CDRStatus.reason);
+						break;
+					case DIAL_STANDBY:
+						nResult = SsmGetChStateKeepTime(ChInfo[i].IVRChannelNumber);
+
+						if (nResult > 2000)
+						{
+							//ChInfo[i].CDRStatus.end_time = time(0);
+							StrCpyA(ChInfo[ChInfo[i].IVRChannelNumber].CDRStatus.reason, "DIAL_STANDBY");
+							StrCpyA(ChInfo[ChInfo[i].IVRChannelNumber].CDRStatus.status, "FAIL");
+							sprintf_s(ChInfo[ChInfo[i].IVRChannelNumber].CDRStatus.reason_code, "%hu", SsmGetReleaseReason(i));
+							HangupIVRCall(ChInfo[i].IVRChannelNumber);
+							//StrCpyA(ChInfo[i].CDRStatus.reason_code, "0");
+							//LogErrorCodeAndMessage(i);
+							//logger.log(LOGERR, "Channel State: %d at channel Number: %d", DIAL_STANDBY, i);
+							HangupCall(i);
+						}
+
+						break;
+
+					case DIAL_DIALING:
+					case DIAL_ECHOTONE:
+					default:
+						break;
+					}
+					if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING)
+					{
+						//SsmStopSendTone(i);
+						HangupCall(i);
+						HangupIVRCall(ChInfo[i].IVRChannelNumber);
+					}
+					break;
+				case 5:
+					if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING)
+					{
+						StrCpyA(ChInfo[i].CDRStatus.dtmf2, SsmGetDtmfStrA(i));
+						SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
+						HangupCall(i);
+						HangupIVRCall(ChInfo[i].IVRChannelNumber);
+						logger.log(LOGINFO, "call patchup Disconnected..");
 					}
 					break;
 				case 4:
@@ -1182,34 +1499,51 @@ void CSpiceOBDDlg::DoUserWork()
 					if (ChInfo[i].mediaState >= 0)
 					{
 						//StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
-
 						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
 						{
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 3;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 								//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								StrCpyA(ChInfo[i].CDRStatus.firstConsent, ChInfo[i].CDRStatus.dtmf); //copying correct input only.
 							}
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No Input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 2;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-								SsmPlayIndexString(i, CampID);
-								SsmSetWaitDtmfExA(i, 18000, 1, "0123456789*#", true);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[2], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+								int pnFormat; long pnTime;
+								if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+								{
+									WORD wTimeOut = pnTime + 5000;
+									SsmSetWaitDtmfExA(i, wTimeOut, 1, "0123456789*#", true); //set the DTMF termination character
+								}
+								//SsmSetWaitDtmfExA(i, 18000, 1, "0123456789*#", true);
 							}
 							else //Wrong input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 3;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 								//SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
 							}
 						}
@@ -1223,28 +1557,40 @@ void CSpiceOBDDlg::DoUserWork()
 						{
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 3;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 								//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								StrCpyA(ChInfo[i].CDRStatus.firstConsent, ChInfo[i].CDRStatus.dtmf); //copying correct input only.
 							}
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 3;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 							}
 							else //Wrong input
 							{
-								SsmStopPlayIndex(i);
+								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 3;
-								sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								SsmPlayIndexString(i, CampID);
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], 7, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
 							}
 						}
 					}
@@ -1260,7 +1606,6 @@ void CSpiceOBDDlg::DoUserWork()
 					break;
 				}
 				break;
-
 			default:
 				break;
 			}
@@ -1460,7 +1805,8 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			for (int i = 0; i < nTotalCh; i++)
 			{
 				ChInfo[i].EnCalled = false;
-				ChInfo[i].rowTobeUpdated = false;
+				ChInfo[i].isIVRChannel = false;
+				//ChInfo[i].rowTobeUpdated = false;
 				int chType = SsmGetChType(i);
 				if (chType == 11) //ISUP channel(China SS7 signaling ISUP)
 				{
@@ -1484,7 +1830,11 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 					StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
 					StrCpyA(ChInfo[i].CDRStatus.firstConsent, "");
 					StrCpyA(ChInfo[i].CDRStatus.secondConsent, "");
-
+					if (i >= nIVRMinCh && i < nIVRMaxCh)
+					{
+						ChInfo[i].isIVRChannel = true;
+						ChInfo[i].InUse = false;
+					}
 					for (size_t j = 1; j <= Campaigns.size(); j++)
 					{
 						if (i >= Campaigns.at(j).minCh && i <= Campaigns.at(j).maxCh)
@@ -1515,23 +1865,24 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 				}
 			}
 			//Loading wav file on different positions for all campaigns
-			char alias[10];
+//			char alias[10];
 			int index = 0;
 			for (size_t i = 1; i <= Campaigns.size(); i++)
 			{
-				char tempPath[255];
+				char tempPath[100];
 				char fileName[16];
 				int j = 1;
 				StrCpyA(tempPath, "");
 				//Campaigns.at(i).hasReachedThreshold = false;
 				while (true)
 				{
-					StrCpyA(tempPath, Campaigns.at(i).promptsPath);
+					StrCpyA(tempPath, Campaigns.at(i).promptsDirectory);
 					sprintf_s(fileName, "%d.wav", j);
 					StrCatA(tempPath, fileName);
+					//logger.log(LOGINFO, "tempPath: %s", tempPath);
 					if (PathFileExistsA(tempPath))
 					{
-						index = i * 10 + j;
+						/*index = i * 10 + j;
 						sprintf_s(alias, "alias%d", index);
 						if (SsmLoadIndexData(index, alias, 7, tempPath, 0, -1) != 0)
 						{
@@ -1539,9 +1890,9 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 							errMsg.Format(L"Load Index %d Error", index);
 							AfxMessageBox(errMsg);
 							PostQuitMessage(0);
-						}
-						Campaigns.at(i).loadedIndex[j] = index;
-						//logger.log(LOGINFO, "Path: %s, index: %d, alias: %s, total Index: %d", tempPath, Campaigns.at(i).loadedIndex[j], alias, SsmGetTotalIndexSeg());
+						}*/
+						StrCpyA(Campaigns.at(i).promptsPath[j], tempPath);
+						logger.log(LOGINFO, "Path: %s, index: %s, total Index: %d", tempPath, Campaigns.at(i).promptsPath[j], SsmGetTotalIndexSeg());
 						j++;
 					}
 					else

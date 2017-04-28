@@ -37,7 +37,8 @@ enum OBD_DIAL_PLAN
 	Informative = 1,
 	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
 	AcquisitionalOBDWithout1stConsent,
-	AcquisitionalOBDWith1stConsent /*1: welcome, 2: No input again, 3: Thanks*/
+	AcquisitionalOBDWith1stConsent, /*1: welcome, 2: No input again, 3: Thanks*/
+	AcquisitionalOBDWith1stAnd2ndIVRConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
 };
 typedef struct
 {
@@ -45,7 +46,7 @@ typedef struct
 	int channel;
 	char groupid[30];
 	char campaign_id[50];
-	char circle[20];
+	//char circle[20];
 	char call_date[20];
 	char ani[20];
 	char cli[20];
@@ -73,8 +74,10 @@ typedef struct {
 	// trunck channel vars
 	bool  EnCalled;
 	BOOL rowTobeUpdated;
+	bool isIVRChannel;
 	int   lineState;
 	int InUse;
+	int IVRChannelNumber; //channel number patchedup
 	char DtmfBuf[251];
 	int DtmfState;
 	int ConsentState;
@@ -101,9 +104,9 @@ typedef struct
 	char CLI[31];
 	int channelsAllocated;
 	//BOOL hasReachedThreshold;
-	char promptsPath[255];
-	char campaign_id[255];
-	int loadedIndex[10];
+	char promptsDirectory[100];
+	char campaign_id[100];
+	char promptsPath[10][100];
 	OBD_DIAL_PLAN obdDialPlan;
 	int minCh, maxCh;
 }CampaignData;
@@ -119,6 +122,8 @@ private:
 	// Construction
 public:
 	WORD	nTotalCh;
+	int nIVRMinCh, nIVRMaxCh;
+	char circle[20], zone[20];
 	CH_INFO* ChInfo;
 	CLogger logger;
 	int totalPhoneNumbers;
@@ -151,6 +156,7 @@ public:
 	void UpdateStatusAndPickNextRecords();
 	char* GetReleaseErrorReason(WORD code);
 	void HangupCall(int ch);
+	void HangupIVRCall(int ch);
 	CSpiceOBDDlg(CWnd* pParent = NULL);	// standard constructor
 
 										// Dialog Data
