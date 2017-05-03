@@ -39,6 +39,9 @@ enum OBD_DIAL_PLAN
 	AcquisitionalOBDWithout1stConsent,
 	AcquisitionalOBDWith1stConsent, /*1: welcome, 2: No input again, 3: Thanks*/
 	AcquisitionalOBDWith1stAnd2ndIVRConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
+	AcquisitionalOBDWith1stIVRConsentDT10, /*Promprs Index are as 1: 1st prompt , 2: thanks, 3: idea jingle, 4: wrong input, 5: no input*/
+	AcquisitionalOBDWith1stIVRConsentDT20,/*Promprs Index are as 1: 1st prompt , 2: 2nd prompt , 3: idea jingle, 4: thanks, 5: wrong input, 6: no input  */
+	AcquisitionalOBDWith1stIVRConsentDT30/*Promprs Index are as 1: 1st prompt , 2: 2nd prompts , 3: 3rd propt, 4: idea jingle ,5: thanks , 6: wrong input, 7 : no input*/
 };
 typedef struct
 {
@@ -65,6 +68,8 @@ typedef struct
 	char dtmf2[50];
 	char firstConsent[50];
 	char secondConsent[50];
+	char songName[100];
+	char DNIS[31];
 	char retry_status[11];
 	char status[11];
 } CDR_STATUS;
@@ -81,14 +86,16 @@ typedef struct {
 	char DtmfBuf[251];
 	int DtmfState;
 	int ConsentState;
+	int DTCounter;
+	int repeatPromptNumber;
 	CDR_STATUS CDRStatus;
 	OBD_DIAL_PLAN DialPlanStatus;
 	// user channel  vars
 	APP_USER_STATE	nStep;
 	int mediaState;
-	int				nToTrkCh;
-	char			pPhoNumBuf[31];
-	int				nTimeOut;
+	int	nToTrkCh;
+	char pPhoNumBuf[31];
+	int	nTimeOut;
 	int CampaignID;
 }CH_INFO;
 
@@ -103,7 +110,7 @@ typedef struct
 	vector<pnNumWithEncryptedAni> phnumBuf;
 	char CLI[31];
 	int channelsAllocated;
-	//BOOL hasReachedThreshold;
+	BOOL isCampaignCompleted;
 	char promptsDirectory[100];
 	char campaign_id[100];
 	char promptsPath[10][100];
@@ -118,8 +125,9 @@ private:
 	MYSQL* conn;
 	MYSQL_RES *res;
 	MYSQL_ROW row;
-	int i;
-	// Construction
+	//int i;
+	void SetDiallingStartStopBtn(BOOL enableStart);
+
 public:
 	WORD	nTotalCh;
 	int nIVRMinCh, nIVRMaxCh;
@@ -138,6 +146,7 @@ public:
 
 	BOOL UpdatePhNumbersStatus(int ch);
 	void ReadNumbersFromFiles();
+	BOOL isCampaignChannelsCleared(int campaignKey);
 	int GetAnIdleChannel();
 	BOOL InitCtiBoard();
 	void DoUserWork();
