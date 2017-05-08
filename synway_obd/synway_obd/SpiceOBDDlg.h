@@ -112,7 +112,8 @@ typedef struct
 typedef struct
 {
 	vector<pnNumWithEncryptedAni> phnumBuf;
-	char CLI[31];
+	vector<std::string> cliList;
+	//char CLI[31];
 	int channelsAllocated;
 	BOOL isCampaignCompleted;
 	char promptsDirectory[100];
