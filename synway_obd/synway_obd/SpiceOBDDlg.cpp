@@ -221,7 +221,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 	int query_state;
 	char queryStr[256];
 
-	StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type, circle, zone from tbl_campaign_master where campaign_status = 1 and base_status = 1 and prompts_status = 1");
+	StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type, circle, zone, campaign_name from tbl_campaign_master where campaign_status = 1 and base_status = 1 and prompts_status = 1");
 
 	//logger.log(LOGINFO, queryStr);
 
@@ -236,55 +236,124 @@ BOOL CSpiceOBDDlg::GetDBData()
 	res = mysql_store_result(conn);
 
 	CampaignData tempdata;
-	int i = 1, channelsOccupied = -1;
+	int campKey = 1, channelsOccupied = -1;
 
 	StrCpyA(circle, "");
 	StrCpyA(zone, "");
 
 	while ((row = mysql_fetch_row(res)) != NULL)
 	{
-		StrCpyA(tempdata.campaign_id, row[0]);
-		StrCpyA(tempdata.CLI, row[1]);
-		tempdata.channelsAllocated = atoi(row[2]);
-		StrCpyA(tempdata.promptsDirectory, row[3]);
-		tempdata.obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
+		BOOL isNewCampaign = true;
+		for (size_t campaignKey = 1; campaignKey <= Campaigns.size(); campaignKey++)
+		{
+			if (StrCmpA(Campaigns.at(campaignKey).campaign_id, row[0]) == 0)
+			{
+				isNewCampaign = false;
+				StrCpyA(Campaigns.at(campaignKey).CLI, row[1]);
+				Campaigns.at(campaignKey).channelsAllocated = atoi(row[2]);
+				StrCpyA(Campaigns.at(campaignKey).promptsDirectory, row[3]);
+				Campaigns.at(campaignKey).obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
+				//StrCpyA(tempdata.campaign_name, row[7]);
+
+				Campaigns.at(campaignKey).minCh = channelsOccupied + 1;
+				channelsOccupied = Campaigns.at(campaignKey).minCh + Campaigns.at(campaignKey).channelsAllocated - 1;
+				Campaigns.at(campaignKey).maxCh = channelsOccupied;
+			}
+		}
+		if (isNewCampaign)
+		{
+			StrCpyA(tempdata.campaign_id, row[0]);
+			StrCpyA(tempdata.CLI, row[1]);
+			tempdata.channelsAllocated = atoi(row[2]);
+			StrCpyA(tempdata.promptsDirectory, row[3]);
+			tempdata.obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
+			StrCpyA(tempdata.campaign_name, row[7]);
+
+			tempdata.minCh = channelsOccupied + 1;
+			channelsOccupied = tempdata.minCh + tempdata.channelsAllocated - 1;
+			tempdata.maxCh = channelsOccupied;
+
+			Campaigns.insert(pair<int, CampaignData>(campKey, tempdata));
+		}
+		if ((Campaigns.at(campKey).phnumBuf.size() <= (2 * Campaigns.at(campKey).channelsAllocated)))
+		{
+			//Get out dialer numbers 5 times to the allocated channel numbers to the campaign
+			sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
+				row[0], 0, (5 * Campaigns.at(campKey).channelsAllocated));
+
+			//logger.log(LOGINFO, queryStr);
+
+			query_state = mysql_query(conn, queryStr);
+
+			if (query_state != 0)
+			{
+				CString err(mysql_error(conn));
+				AfxMessageBox(err);
+			}
+
+			MYSQL_RES * resPhBuf = mysql_store_result(conn);
+			MYSQL_ROW rowPhBuf;
+			Campaigns.at(campKey).phnumBuf.clear();
+			while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
+			{
+				char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
+				Campaigns.at(campKey).phnumBuf.push_back({ DecryptedVal, rowPhBuf[0] });
+			}
+		}
 		//copying circle and zone to the global variables
 		if (!StrCmpA(circle, "") && !StrCmpA(zone, ""))
 		{
 			StrCpyA(circle, row[5]);
 			StrCpyA(zone, row[6]);
 		}
+		/*for (size_t i = 1; i <= Campaigns.size(); i++)
+		{*/
+			char tempPath[100];
+			char fileName[16];
+			int j = 1;
+			StrCpyA(tempPath, "");
+			//Campaigns.at(i).isCampaignCompleted = false;
+			while (true)
+			{
+				StrCpyA(tempPath, Campaigns.at(campKey).promptsDirectory);
+				sprintf_s(fileName, "%d.wav", j);
+				StrCatA(tempPath, fileName);
+				//logger.log(LOGINFO, "tempPath: %s", tempPath);
+				if (PathFileExistsA(tempPath))
+				{
+					/*index = i * 10 + j;
+					sprintf_s(alias, "alias%d", index);
+					if (SsmLoadIndexData(index, alias, 7, tempPath, 0, -1) != 0)
+					{
+					CString errMsg;
+					errMsg.Format(L"Load Index %d Error", index);
+					AfxMessageBox(errMsg);
+					PostQuitMessage(0);
+					}*/
+					StrCpyA(Campaigns.at(campKey).promptsPath[j], tempPath);
+					//logger.log(LOGINFO, "Path: %s, index: %s, total Index: %d", tempPath, Campaigns.at(i).promptsPath[j], SsmGetTotalIndexSeg());
+					j++;
+				}
+				else
+				{
+					break;
+				}
+			}//End While
+			 //update campaign status while its in execution
+			/*int query_state;
+			char queryStr[256];
+			sprintf_s(queryStr, "update tbl_campaign_master set execution_status=1,campaign_status=2 where campaign_id='%s' and execution_status=0", Campaigns.at(i).campaign_id);
+			query_state = mysql_query(conn, queryStr);
+			if (query_state != 0)
+			{
+				CString err(mysql_error(conn));
+				AfxMessageBox(err);
+			}*/
 
-		//Get out dialer numbers 5 times to the allocated channel numbers to the campaign
-		sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
-			row[0], 0, (5 * tempdata.channelsAllocated));
-
-		//logger.log(LOGINFO, queryStr);
-
-		query_state = mysql_query(conn, queryStr);
-
-		if (query_state != 0)
-		{
-			CString err(mysql_error(conn));
-			AfxMessageBox(err);
-		}
-
-		MYSQL_RES * resPhBuf = mysql_store_result(conn);
-		MYSQL_ROW rowPhBuf;
-		while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
-		{
-			char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
-			tempdata.phnumBuf.push_back({ DecryptedVal, rowPhBuf[0] });
-		}
-		tempdata.minCh = channelsOccupied + 1;
-		channelsOccupied = tempdata.minCh + tempdata.channelsAllocated - 1;
-		tempdata.maxCh = channelsOccupied;
-
-		Campaigns.insert(pair<int, CampaignData>(i, tempdata));
-		i++;
-		tempdata.phnumBuf.clear();
+		//}//End For
+		campKey++;
 	}
-	//get total ports and cg ports
+	//get total ports and cg ports and campaign wise distribution
 	sprintf_s(queryStr, "select total_ports, cgport from tbl_port_manager where zone = '%s' and circle = '%s'", zone, circle);
 	logger.log(LOGINFO, "Select ports query:  %s", queryStr);
 	query_state = mysql_query(conn, queryStr);
@@ -306,67 +375,68 @@ BOOL CSpiceOBDDlg::GetDBData()
 		nIVRMaxCh = nTotalCh;
 	}
 	logger.log(LOGINFO, "total Ports: %d, minIvrCh: %d", nTotalCh, nIVRMinCh);
+	
 	return true;
 }
 
 BOOL CSpiceOBDDlg::UpdateDBData(/*int chState*/)
 {
-	try {
-		int query_state, chState = 1;
-		char queryStr1[131071], queryStr2[131071];
-		StrCpyA(queryStr1, "update tbl_outdialer_base set status =  ( case ");
-		int countNumbers = 0;
-		int lastIndex;
-		for (int i = 0; i < nTotalCh; i++)
-		{
-			if (ChInfo[i].rowTobeUpdated)
-			{
-				char tempStr[1024];
+	//try {
+	//	int query_state, chState = 1;
+	//	char queryStr1[131071], queryStr2[131071];
+	//	StrCpyA(queryStr1, "update tbl_outdialer_base set status =  ( case ");
+	//	int countNumbers = 0;
+	//	int lastIndex;
+	//	for (int i = 0; i < nTotalCh; i++)
+	//	{
+	//		if (ChInfo[i].rowTobeUpdated)
+	//		{
+	//			char tempStr[1024];
 
-				sprintf_s(tempStr, "when ani = '%s' then %d ", ChInfo[i].pPhoNumBuf, chState/*ChInfo[i].nStep*/); //TODO: comented section will be used
-				StrCatA(queryStr1, tempStr);
-				countNumbers++;
-				lastIndex = i;
-			}
-		}
-		StrCpyA(queryStr2, "end) where ani in(");
-		int i = 0;
-		for (i = 0; i < nTotalCh; i++)
-		{
-			if (ChInfo[i].rowTobeUpdated == true && countNumbers > 1)
-			{
-				char tempStr[1024];
-				sprintf_s(tempStr, "'%s', ", ChInfo[i].pPhoNumBuf);
-				StrCatA(queryStr2, tempStr);
-				countNumbers--;
-			}
-		}
+	//			sprintf_s(tempStr, "when ani = '%s' then %d ", ChInfo[i].pPhoNumBuf, chState/*ChInfo[i].nStep*/); //TODO: comented section will be used
+	//			StrCatA(queryStr1, tempStr);
+	//			countNumbers++;
+	//			lastIndex = i;
+	//		}
+	//	}
+	//	StrCpyA(queryStr2, "end) where ani in(");
+	//	int i = 0;
+	//	for (i = 0; i < nTotalCh; i++)
+	//	{
+	//		if (ChInfo[i].rowTobeUpdated == true && countNumbers > 1)
+	//		{
+	//			char tempStr[1024];
+	//			sprintf_s(tempStr, "'%s', ", ChInfo[i].pPhoNumBuf);
+	//			StrCatA(queryStr2, tempStr);
+	//			countNumbers--;
+	//		}
+	//	}
 
-		//For the last one no comma required
+	//	//For the last one no comma required
 
-		char tempStr[48];
-		sprintf_s(tempStr, "'%s'", ChInfo[lastIndex].pPhoNumBuf);
-		StrCatA(queryStr2, tempStr);
+	//	char tempStr[48];
+	//	sprintf_s(tempStr, "'%s'", ChInfo[lastIndex].pPhoNumBuf);
+	//	StrCatA(queryStr2, tempStr);
 
 
 
-		StrCatA(queryStr2, ")");
-		StrCatA(queryStr1, queryStr2);
-		query_state = mysql_query(conn, queryStr1);
+	//	StrCatA(queryStr2, ")");
+	//	StrCatA(queryStr1, queryStr2);
+	//	query_state = mysql_query(conn, queryStr1);
 
-		logger.log(LOGINFO, queryStr1);
+	//	logger.log(LOGINFO, queryStr1);
 
-		if (query_state != 0)
-		{
-			CString err(mysql_error(conn));
-			AfxMessageBox(err);
-			return false;
-		}
-	}
-	catch (CString msg)
-	{
-		AfxMessageBox(msg);
-	}
+	//	if (query_state != 0)
+	//	{
+	//		CString err(mysql_error(conn));
+	//		AfxMessageBox(err);
+	//		return false;
+	//	}
+	//}
+	//catch (CString msg)
+	//{
+	//	AfxMessageBox(msg);
+	//}
 	return true;
 }
 
@@ -500,74 +570,111 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	}
 	char queryStr[256];
 	int query_state;
-	//Loop to pick next records for all campaigns.
-	for (size_t tmpCmpId = 1; tmpCmpId <= Campaigns.size(); tmpCmpId++)
-	{
-		//int tmpCmpId = ChInfo[i].CampaignID;
-		//if (tmpCmpId != -1)
-		//{
-		if ((Campaigns.at(tmpCmpId).phnumBuf.size() <= (2 * Campaigns.at(tmpCmpId).channelsAllocated))/* && !Campaigns.at(tmpCmpId).hasReachedThreshold*/)
-		{
-			sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
-				Campaigns.at(tmpCmpId).campaign_id, 0, (5 * Campaigns.at(tmpCmpId).channelsAllocated));
-
-			query_state = mysql_query(conn, queryStr);
-
-			if (query_state != 0)
+	////Loop to pick next records for all campaigns.
+	//for (size_t tmpCmpId = 1; tmpCmpId <= Campaigns.size(); tmpCmpId++)
+	//{
+	//	//int tmpCmpId = ChInfo[i].CampaignID;
+	//	//if (tmpCmpId != -1)
+	//	//{
+	//	if ((Campaigns.at(tmpCmpId).phnumBuf.size() <= (2 * Campaigns.at(tmpCmpId).channelsAllocated))/* && !Campaigns.at(tmpCmpId).hasReachedThreshold*/)
+	//	{
+			if (GetDBData())
 			{
-				CString err(mysql_error(conn));
-				AfxMessageBox(err);
-			}
-			MYSQL_RES * resPhBuf = mysql_store_result(conn);
-			MYSQL_ROW rowPhBuf;
-			Campaigns.at(tmpCmpId).phnumBuf.clear();
-			while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
-			{
-				char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
-				Campaigns.at(tmpCmpId).phnumBuf.push_back({ DecryptedVal, rowPhBuf[0] });
-			}
+				for (int ch = 0; ch < nTotalCh; ch++)
+				{
+					for (size_t j = 1; j <= Campaigns.size(); j++)
+					{
+						if (ch >= Campaigns.at(j).minCh && ch <= Campaigns.at(j).maxCh)
+						{
+							if (ChInfo[ch].isAvailable)
+							{
+								ChInfo[ch].CampaignID = j;
 
+								//setting caller ID 
+								if (SsmSetTxCallerId(ch, Campaigns.at(j).CLI) == -1)
+								{
+									getErrorResult(_T(" SsmSetTxCallerId"));
+								}
+								CString tempStr2(Campaigns.at(j).CLI), campIdStr;
+								wchar_t curCLI[31], curCampID[31];
+								campIdStr.Format(_T("%d"), j);
+								m_TrkChList.GetItemText(ch, 3, curCLI, 31);
+								if (curCLI != tempStr2)
+								{
+									m_TrkChList.SetItemText(ch, 3, tempStr2);
+								}
+								m_TrkChList.GetItemText(ch, 5, curCampID, 31); 
+								if (curCampID != campIdStr)
+								{
+									m_TrkChList.SetItemText(ch, 5, campIdStr);
+								}
+							}
+						}
+					}
+				}
+			}
 			//check if no mmore number to be dialed and all channels are freed for specific campaign
-			if (!Campaigns.at(tmpCmpId).isCampaignCompleted && Campaigns.at(tmpCmpId).phnumBuf.empty() && isCampaignChannelsCleared(tmpCmpId))
-			{
-				Campaigns.at(tmpCmpId).isCampaignCompleted = true;
-				sprintf_s(queryStr, "update tbl_campaign_master set campaign_status=3 where campaign_id='%s'", Campaigns.at(tmpCmpId).campaign_id);
-				query_state = mysql_query(conn, queryStr);
+			//if (!Campaigns.at(tmpCmpId).isCampaignCompleted && Campaigns.at(tmpCmpId).phnumBuf.empty() && isCampaignChannelsCleared(tmpCmpId))
+			//{
+			//	Campaigns.at(tmpCmpId).isCampaignCompleted = true;
+			//	//sprintf_s(queryStr, "update tbl_campaign_master set campaign_status=3 where campaign_id='%s'", Campaigns.at(tmpCmpId).campaign_id);
+			//	sprintf_s(queryStr, "call procDeallocateChannel('%s', )", Campaigns.at(tmpCmpId).campaign_id);
+			//	query_state = mysql_query(conn, queryStr);
 
-				if (query_state != 0)
-				{
-					CString err(mysql_error(conn));
-					AfxMessageBox(err);
-				}
-				if (mysql_affected_rows(conn) >= 1)
-				{
-					logger.log(LOGINFO, "Campaign : '%s' completed !!!", Campaigns.at(tmpCmpId).campaign_id);
-				}
-			}
-		}
+			//	if (query_state != 0)
+			//	{
+			//		CString err(mysql_error(conn));
+			//		AfxMessageBox(err);
+			//	}
+			//	if (mysql_affected_rows(conn) >= 1)
+			//	{
+			//		logger.log(LOGINFO, "Campaign : '%s' completed !!!", Campaigns.at(tmpCmpId).campaign_id);
+			//	}
+			//}
+		/*}
+	}*/
+	//		sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
+	//			Campaigns.at(tmpCmpId).campaign_id, 0, (5 * Campaigns.at(tmpCmpId).channelsAllocated));
 
-		/*if (!Campaigns.at(tmpCmpId).phnumBuf.empty())
-		{
-		CString tempStr2(Campaigns.at(tmpCmpId).phnumBuf.front().ani);
-		StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tmpCmpId).phnumBuf.front().ani);
-		StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tmpCmpId).phnumBuf.front().encryptedAni);
-		m_TrkChList.SetItemText(i, 4, tempStr2);
-		Campaigns.at(tmpCmpId).phnumBuf.erase(Campaigns.at(tmpCmpId).phnumBuf.begin());
-		logger.log(LOGINFO, "UpdateStatusAndPickNextRecords Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
-		//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
-		if (!UpdatePhNumbersStatus(i))
-		{
-		logger.log(LOGINFO,"UpdateStatusAndPickNextRecords Row not updated...ph number: %s, channel number: %d", ChInfo[i].pPhoNumBuf, i);
-		}
-		}
-		else
-		{
-		StrCpyA(ChInfo[i].pPhoNumBuf, "");
-		StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
-		m_TrkChList.SetItemText(i, 4, L"");
-		}*/
+	//		query_state = mysql_query(conn, queryStr);
+
+	//		if (query_state != 0)
+	//		{
+	//			CString err(mysql_error(conn));
+	//			AfxMessageBox(err);
+	//		}
+	//		MYSQL_RES * resPhBuf = mysql_store_result(conn);
+	//		MYSQL_ROW rowPhBuf;
+	//		Campaigns.at(tmpCmpId).phnumBuf.clear();
+	//		while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
+	//		{
+	//			char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
+	//			Campaigns.at(tmpCmpId).phnumBuf.push_back({ DecryptedVal, rowPhBuf[0] });
+	//		}
 		//}
-	}
+
+	//	/*if (!Campaigns.at(tmpCmpId).phnumBuf.empty())
+	//	{
+	//	CString tempStr2(Campaigns.at(tmpCmpId).phnumBuf.front().ani);
+	//	StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tmpCmpId).phnumBuf.front().ani);
+	//	StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tmpCmpId).phnumBuf.front().encryptedAni);
+	//	m_TrkChList.SetItemText(i, 4, tempStr2);
+	//	Campaigns.at(tmpCmpId).phnumBuf.erase(Campaigns.at(tmpCmpId).phnumBuf.begin());
+	//	logger.log(LOGINFO, "UpdateStatusAndPickNextRecords Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
+	//	//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
+	//	if (!UpdatePhNumbersStatus(i))
+	//	{
+	//	logger.log(LOGINFO,"UpdateStatusAndPickNextRecords Row not updated...ph number: %s, channel number: %d", ChInfo[i].pPhoNumBuf, i);
+	//	}
+	//	}
+	//	else
+	//	{
+	//	StrCpyA(ChInfo[i].pPhoNumBuf, "");
+	//	StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
+	//	m_TrkChList.SetItemText(i, 4, L"");
+	//	}*/
+	//	//}
+	//}
 
 }
 
@@ -620,11 +727,11 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 
 			int tmpCmpId = ChInfo[i].CampaignID;
 
-			outfile << "IDEA_HR" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani
+			outfile << "IDEA_" << circle <<"#"<<Campaigns.at(tmpCmpId).campaign_name << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << Campaigns.at(tmpCmpId).CLI << "#" << ChInfo[i].CDRStatus.ani
 				<< "#" << ChInfo[i].CDRStatus.encrypted_ani << "#" << call_time << "#" << answer_time << "#" << end_time << "#" << ChInfo[i].CDRStatus.callPatch_duration
 				<< "#" << ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.total_duration << "#" << ChInfo[i].CDRStatus.status << "#"
 				<< ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#"
-				<< ChInfo[i].CDRStatus.channel << "#" << "#" << ChInfo[i].CDRStatus.songName<<"#" << ChInfo[i].CDRStatus.DNIS << "#"<< Campaigns.at(tmpCmpId).campaign_id << "#" << endl;
+				<< ChInfo[i].CDRStatus.channel << "#" << ChInfo[i].CDRStatus.songName<<"#" << ChInfo[i].CDRStatus.DNIS << "#"<< Campaigns.at(tmpCmpId).campaign_id << "#" << endl;
 
 			//Check if CDR file is greater than 10 MB make a new one.
 		/*	if (outfile.tellp() >= 100)
@@ -633,11 +740,11 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 				openCDRLogFile();
 			}*/
 			//Insert Call records in DB
-			sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_calls(channel, campaign_id, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id) \
-				VALUES(%d, '%s', 'Idea HR', '%s', '%s', '%s#%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s')",
-				ChInfo[i].CDRStatus.channel, Campaigns.at(tmpCmpId).campaign_id, ChInfo[i].CDRStatus.ani, Campaigns.at(tmpCmpId).CLI, ChInfo[i].CDRStatus.dtmf, ChInfo[i].CDRStatus.dtmf2, ChInfo[i].CDRStatus.answer_duration,
+			sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_calls(channel, campaign_id, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id, song_name, patch_dnis) \
+				VALUES(%d, '%s', 'Idea %s', '%s', '%s', '%s#%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s', '%s', '%s')",
+				ChInfo[i].CDRStatus.channel, Campaigns.at(tmpCmpId).campaign_id, circle , ChInfo[i].CDRStatus.ani, Campaigns.at(tmpCmpId).CLI, ChInfo[i].CDRStatus.dtmf, ChInfo[i].CDRStatus.dtmf2, ChInfo[i].CDRStatus.answer_duration,
 				StrCmpA(ChInfo[i].CDRStatus.status, "SUCCESS") == 0 ? 1 : 0, ChInfo[i].CDRStatus.callPatch_duration, dateVal, call_time, answer_time, end_time, ChInfo[i].CDRStatus.reason_code,
-				ChInfo[i].CDRStatus.total_duration, ChInfo[i].CDRStatus.reason, ChInfo[i].CDRStatus.encrypted_ani, ChInfo[i].CDRStatus.ani, timeVal);
+				ChInfo[i].CDRStatus.total_duration, ChInfo[i].CDRStatus.reason, ChInfo[i].CDRStatus.encrypted_ani, ChInfo[i].CDRStatus.ani, timeVal, ChInfo[i].CDRStatus.songName, ChInfo[i].CDRStatus.DNIS);
 
 			logger.log(LOGINFO, queryStrInsert);
 			query_state = mysql_query(conn, queryStrInsert);
@@ -666,6 +773,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			StrCpyA(ChInfo[i].CDRStatus.reason_code, "");
 			StrCpyA(ChInfo[i].CDRStatus.songName, "");
 			StrCpyA(ChInfo[i].CDRStatus.DNIS, "");
+			ChInfo[i].isAvailable = true;
 		}
 	}//For loop
 }
@@ -987,6 +1095,7 @@ void CSpiceOBDDlg::DoUserWork()
 					m_TrkChList.SetItemText(i, 4, tempStr2);
 					delete Campaigns.at(tempCampId).phnumBuf.front().ani;
 					Campaigns.at(tempCampId).phnumBuf.erase(Campaigns.at(tempCampId).phnumBuf.begin());
+					ChInfo[i].isAvailable = false;
 					logger.log(LOGINFO, "DoUserWork Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
 					//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
 					if (!UpdatePhNumbersStatus(i))
@@ -1526,10 +1635,11 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10];
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState;
-								sprintf_s(songQuery, "select song_name, promo_code from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
-									Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(conn, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
@@ -1542,10 +1652,12 @@ void CSpiceOBDDlg::DoUserWork()
 								res = mysql_store_result(conn);
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7)
+									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -1553,6 +1665,8 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
+									StrCpyA(levelType, row[2]);
+									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
@@ -1572,21 +1686,40 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
 									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
-									char DTNumberToBeDialed[31];
+									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
 									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
 									StrCatA(DTNumberToBeDialed, "8045");
 									StrCatA(DTNumberToBeDialed, songCode);
-									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);
-									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, DTNumberToBeDialed) == -1)
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
 									{
 										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
 										HangupIVRCall(ChInfo[i].IVRChannelNumber);
 										HangupCall(i);
 									}
 									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, DTNumberToBeDialed);
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								}
 								else //Wrong Input
@@ -1635,10 +1768,11 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10];
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState;
-								sprintf_s(songQuery, "select song_name, promo_code from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
-									Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+								
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(conn, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
@@ -1651,10 +1785,12 @@ void CSpiceOBDDlg::DoUserWork()
 								res = mysql_store_result(conn);
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7)
+									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -1662,6 +1798,8 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
+									StrCpyA(levelType, row[2]);
+									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
@@ -1681,21 +1819,40 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
 									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
-									char DTNumberToBeDialed[31];
+									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
 									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
 									StrCatA(DTNumberToBeDialed, "8045");
 									StrCatA(DTNumberToBeDialed, songCode);
-									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);
-									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, DTNumberToBeDialed) == -1)
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
 									{
 										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
 										HangupIVRCall(ChInfo[i].IVRChannelNumber);
 										HangupCall(i);
 									}
 									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, DTNumberToBeDialed);
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								}
 								else //Wrong Input
@@ -1847,10 +2004,11 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10];
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState;
-								sprintf_s(songQuery, "select song_name, promo_code from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
-									Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(conn, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
@@ -1863,11 +2021,12 @@ void CSpiceOBDDlg::DoUserWork()
 								res = mysql_store_result(conn);
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
-
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7)
+									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -1875,8 +2034,11 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
+									StrCpyA(levelType, row[2]);
+									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
+								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
 									SsmStopPlay(i);
@@ -1893,21 +2055,40 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
 									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
-									char DTNumberToBeDialed[31];
+									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
 									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
 									StrCatA(DTNumberToBeDialed, "8045");
 									StrCatA(DTNumberToBeDialed, songCode);
-									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);
-									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, DTNumberToBeDialed) == -1)
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
 									{
 										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
 										HangupIVRCall(ChInfo[i].IVRChannelNumber);
 										HangupCall(i);
 									}
 									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, DTNumberToBeDialed);
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								}
 								else //Wrong Input
@@ -1958,10 +2139,11 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10];
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState;
-								sprintf_s(songQuery, "select song_name, promo_code from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
-									Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(conn, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
@@ -1974,10 +2156,12 @@ void CSpiceOBDDlg::DoUserWork()
 								res = mysql_store_result(conn);
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7)
+									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -1985,8 +2169,11 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
+									StrCpyA(levelType, row[2]);
+									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
+								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
 									SsmStopPlay(i);
@@ -2003,21 +2190,40 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
 									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
-									char DTNumberToBeDialed[31];
+									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
 									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
 									StrCatA(DTNumberToBeDialed, "8045");
 									StrCatA(DTNumberToBeDialed, songCode);
-									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);
-									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, DTNumberToBeDialed) == -1)
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
 									{
 										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
 										HangupIVRCall(ChInfo[i].IVRChannelNumber);
 										HangupCall(i);
 									}
 									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, DTNumberToBeDialed);
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								}
 								else //Wrong Input
@@ -2068,10 +2274,11 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10];
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState;
-								sprintf_s(songQuery, "select song_name, promo_code from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
-									Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(conn, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
@@ -2084,10 +2291,12 @@ void CSpiceOBDDlg::DoUserWork()
 								res = mysql_store_result(conn);
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
-								while ((row = mysql_fetch_row(res)) != NULL)
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
+								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7)
+									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -2095,8 +2304,11 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
+									StrCpyA(levelType, row[2]);
+									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
+								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
 									SsmStopPlay(i);
@@ -2113,21 +2325,40 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
 									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
-									char DTNumberToBeDialed[31];
+									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
 									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
 									StrCatA(DTNumberToBeDialed, "8045");
 									StrCatA(DTNumberToBeDialed, songCode);
-									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);
-									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, DTNumberToBeDialed) == -1)
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
 									{
 										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
 										HangupIVRCall(ChInfo[i].IVRChannelNumber);
 										HangupCall(i);
 									}
 									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, DTNumberToBeDialed);
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								}
 								else //Wrong Input
@@ -2295,10 +2526,11 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10];
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState;
-								sprintf_s(songQuery, "select song_name, promo_code from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
-									Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(conn, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
@@ -2311,11 +2543,12 @@ void CSpiceOBDDlg::DoUserWork()
 								res = mysql_store_result(conn);
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
-
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7)
+									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -2323,8 +2556,11 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
+									StrCpyA(levelType, row[2]);
+									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
+								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
 									SsmStopPlay(i);
@@ -2341,21 +2577,40 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
 									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
-									char DTNumberToBeDialed[31];
+									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
 									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
 									StrCatA(DTNumberToBeDialed, "8045");
 									StrCatA(DTNumberToBeDialed, songCode);
-									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);
-									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, DTNumberToBeDialed) == -1)
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
 									{
 										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
 										HangupIVRCall(ChInfo[i].IVRChannelNumber);
 										HangupCall(i);
 									}
 									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, DTNumberToBeDialed);
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								}
 								else //Wrong Input
@@ -2406,10 +2661,11 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10];
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState;
-								sprintf_s(songQuery, "select song_name, promo_code from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
-									Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(conn, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
@@ -2422,10 +2678,12 @@ void CSpiceOBDDlg::DoUserWork()
 								res = mysql_store_result(conn);
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7)
+									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -2433,8 +2691,11 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
+									StrCpyA(levelType, row[2]);
+									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
+								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
 									SsmStopPlay(i);
@@ -2451,21 +2712,40 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
 									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
-									char DTNumberToBeDialed[31];
+									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
 									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
 									StrCatA(DTNumberToBeDialed, "8045");
 									StrCatA(DTNumberToBeDialed, songCode);
-									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);
-									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, DTNumberToBeDialed) == -1)
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
 									{
 										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
 										HangupIVRCall(ChInfo[i].IVRChannelNumber);
 										HangupCall(i);
 									}
 									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, DTNumberToBeDialed);
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								}
 								else //Wrong Input
@@ -2516,10 +2796,11 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10];
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState;
-								sprintf_s(songQuery, "select song_name, promo_code from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 3",
-									Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 3",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(conn, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
@@ -2532,10 +2813,12 @@ void CSpiceOBDDlg::DoUserWork()
 								res = mysql_store_result(conn);
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7)
+									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -2543,8 +2826,11 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
+									StrCpyA(levelType, row[2]);
+									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
+								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
 									SsmStopPlay(i);
@@ -2561,21 +2847,40 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
 									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
-									char DTNumberToBeDialed[31];
+									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
 									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
 									StrCatA(DTNumberToBeDialed, "8045");
 									StrCatA(DTNumberToBeDialed, songCode);
-									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);
-									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, DTNumberToBeDialed) == -1)
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
 									{
 										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
 										HangupIVRCall(ChInfo[i].IVRChannelNumber);
 										HangupCall(i);
 									}
 									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, DTNumberToBeDialed);
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								}
 								else //Wrong Input
@@ -2792,7 +3097,7 @@ void CSpiceOBDDlg::DoUserWork()
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 3;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], -1, 0, -1) == -1)
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -2839,7 +3144,7 @@ void CSpiceOBDDlg::DoUserWork()
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = 3;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], -1, 0, -1) == -1)
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -3060,6 +3365,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			{
 				ChInfo[i].EnCalled = false;
 				ChInfo[i].isIVRChannel = false;
+				ChInfo[i].isAvailable = true;
 				//ChInfo[i].rowTobeUpdated = false;
 				int chType = SsmGetChType(i);
 				if (chType == 11) //ISUP channel(China SS7 signaling ISUP)
@@ -3122,52 +3428,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			}
 			//Loading wav file on different positions for all campaigns
 //			char alias[10];
-			int index = 0;
-			for (size_t i = 1; i <= Campaigns.size(); i++)
-			{
-				char tempPath[100];
-				char fileName[16];
-				int j = 1;
-				StrCpyA(tempPath, "");
-				Campaigns.at(i).isCampaignCompleted = false;
-				while (true)
-				{
-					StrCpyA(tempPath, Campaigns.at(i).promptsDirectory);
-					sprintf_s(fileName, "%d.wav", j);
-					StrCatA(tempPath, fileName);
-					//logger.log(LOGINFO, "tempPath: %s", tempPath);
-					if (PathFileExistsA(tempPath))
-					{
-						/*index = i * 10 + j;
-						sprintf_s(alias, "alias%d", index);
-						if (SsmLoadIndexData(index, alias, 7, tempPath, 0, -1) != 0)
-						{
-							CString errMsg;
-							errMsg.Format(L"Load Index %d Error", index);
-							AfxMessageBox(errMsg);
-							PostQuitMessage(0);
-						}*/
-						StrCpyA(Campaigns.at(i).promptsPath[j], tempPath);
-						logger.log(LOGINFO, "Path: %s, index: %s, total Index: %d", tempPath, Campaigns.at(i).promptsPath[j], SsmGetTotalIndexSeg());
-						j++;
-					}
-					else
-					{
-						break;
-					}
-				}//End While
-				//update campaign status while its in execution
-				int query_state;
-				char queryStr[256];
-				sprintf_s(queryStr, "update tbl_campaign_master set execution_status=1,campaign_status=2 where campaign_id='%s' and execution_status=0", Campaigns.at(i).campaign_id);
-				query_state = mysql_query(conn, queryStr);
-				if (query_state != 0)
-				{
-					CString err(mysql_error(conn));
-					AfxMessageBox(err);
-				}
-
-			}//End For
+			//int index = 0;
 		}
 	}
 	catch (...)
