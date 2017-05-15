@@ -36,9 +36,9 @@ enum OBD_DIAL_PLAN
 {
 	Informative = 1,
 	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
-	AcquisitionalOBDWithout1stConsent,
+	//AcquisitionalOBDWithout1stConsent,
 	AcquisitionalOBDWith1stConsent, /*1: welcome, 2: No input again, 3: Thanks 4: wrong*/
-	AcquisitionalOBDWith1stAnd2ndIVRConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
+	AcquisitionalOBDWithIVRServiceCrossPromo, /*Promprs Index are as 1: 1st prompt , 2: 2nd prompts , 3: 3rd prompt, 4: idea jingle ,5: thanks , 6: wrong input, 7 : no input*/
 	AcquisitionalOBDWith1stIVRConsentDT10, /*Promprs Index are as 1: 1st prompt , 2: thanks, 3: idea jingle, 4: wrong input, 5: no input*/
 	AcquisitionalOBDWith1stIVRConsentDT20,/*Promprs Index are as 1: 1st prompt , 2: 2nd prompt , 3: idea jingle, 4: thanks, 5: wrong input, 6: no input  */
 	AcquisitionalOBDWith1stIVRConsentDT30,/*Promprs Index are as 1: 1st prompt , 2: 2nd prompts , 3: 3rd prompt, 4: idea jingle ,5: thanks , 6: wrong input, 7 : no input*/
@@ -67,8 +67,10 @@ typedef struct
 	char reason[100];
 	char context[30];
 	char encrypted_ani[100];
-	char dtmf[50];
-	char dtmf2[50];
+	char dtmf[10];
+	char dtmf2[10];
+	char dtmfBuf[50];
+	char DNISBuf[100];
 	char firstConsent[50];
 	char secondConsent[50];
 	char songName[100];
@@ -91,7 +93,7 @@ typedef struct {
 	int DtmfState;
 	int ConsentState;
 	int DTCounter;
-	int repeatPromptNumber;
+	int levelNumber;
 	CDR_STATUS CDRStatus;
 	OBD_DIAL_PLAN DialPlanStatus;
 	// user channel  vars
@@ -145,6 +147,7 @@ public:
 	AESEncryption aesEncryption;
 	bool IsUpdate;
 	BOOL IsStartDialling;
+	BOOL IsDailingTimeUP;
 	char *systemIpAddr;
 	ofstream outfile;
 	ofstream ConsentFile;

@@ -236,7 +236,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 	res = mysql_store_result(conn);
 
 	CampaignData tempdata;
-	int campKey = 1, channelsOccupied = -1;
+	int campKey = 1, channelsOccupied = 29;//-1;
 
 	StrCpyA(circle, "");
 	StrCpyA(zone, "");
@@ -396,8 +396,8 @@ BOOL CSpiceOBDDlg::GetDBData()
 		int totalch = atoi(rowPhBuf[0]);
 		int cgports = atoi(rowPhBuf[1]);
 		nTotalCh = totalch + cgports;
-		nIVRMinCh = totalch;
-		nIVRMaxCh = nTotalCh;
+		nIVRMinCh = 0;//totalch;
+		nIVRMaxCh = 29;//nTotalCh;
 	}
 	logger.log(LOGINFO, "total Ports: %d, minIvrCh: %d", nTotalCh, nIVRMinCh);
 
@@ -509,6 +509,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	CString state;
 	wchar_t tmpstr[51];
 	int i, nIndex;
+	logger.log(LOGERR, "UpDateATrunkChListCtrl Start");
 	for (i = 0, nIndex = 0; i < nTotalCh; i++)
 	{
 		//if (SsmGetChType(i) != 2) continue;
@@ -521,7 +522,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 		case S_CALL_ANALOG_WAITDIALTONE:	state = "S_CALL_ANALOG_WAITDIALTONE";	break;
 		case S_CALL_ANALOG_TXPHONUM:		state = "S_CALL_ANALOG_TXPHONUM"; break;
 		case S_CALL_ANALOG_WAITDIALRESULT:	state = "S_CALL_ANALOG_WAITDIALRESULT";		break;
-		case S_CALL_PENDING:				state = "S_CALL_ANALOG_WAITDIALRESULT"; break;
+		case S_CALL_PENDING:				state = "S_CALL_PENDING"; break;
 		case S_CALL_OFFLINE:				state = "S_CALL_OFFLINE"; break;
 		case S_CALL_WAIT_REMOTE_PICKUP:		state = "S_CALL_WAIT_REMOTE_PICKUP"; break;
 		case S_CALL_ANALOG_CLEAR:			state = "S_CALL_ANALOG_CLEAR"; break;
@@ -576,7 +577,6 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 		case S_IPR_USING:					state = "S_IPR_USING"; break;
 		case S_IPR_COMMUNICATING:			state = "S_IPR_COMMUNICATING"; break;
 		case S_ISUP_WaitCOT:				state = "S_ISUP_WaitCOT"; break;
-
 		}
 
 		m_TrkChList.GetItemText(nIndex, 6, tmpstr, 50);
@@ -619,7 +619,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 			}
 		}
 	}
-	//check if no mmore number to be dialed and all channels are freed for specific campaign
+	//check if no mmore number to be dialed and all channels are free for specific campaign
 	//if (!Campaigns.at(tmpCmpId).isCampaignCompleted && Campaigns.at(tmpCmpId).phnumBuf.empty() && isCampaignChannelsCleared(tmpCmpId))
 	//{
 	//	Campaigns.at(tmpCmpId).isCampaignCompleted = true;
@@ -681,7 +681,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 //	}*/
 //	//}
 //}
-
+	logger.log(LOGERR, "UpDateATrunkChListCtrl End");
 }
 
 void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
@@ -736,8 +736,8 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			outfile << "IDEA_" << circle << "#" << Campaigns.at(tmpCmpId).campaign_name << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].CDRStatus.ani
 				<< "#" << ChInfo[i].CDRStatus.encrypted_ani << "#" << call_time << "#" << answer_time << "#" << end_time << "#" << ChInfo[i].CDRStatus.callPatch_duration
 				<< "#" << ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.total_duration << "#" << ChInfo[i].CDRStatus.status << "#"
-				<< ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#"
-				<< ChInfo[i].CDRStatus.channel << "#" << ChInfo[i].CDRStatus.songName << "#" << ChInfo[i].CDRStatus.DNIS << "#" << Campaigns.at(tmpCmpId).campaign_id << "#" << endl;
+				<< ChInfo[i].CDRStatus.reason << "#" << ChInfo[i].CDRStatus.reason_code << "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#"<< ChInfo[i].CDRStatus.dtmfBuf <<"#"
+				<< ChInfo[i].CDRStatus.channel << "#" << ChInfo[i].CDRStatus.songName << "#" << ChInfo[i].CDRStatus.DNIS<<"#"<< ChInfo[i].CDRStatus.DNISBuf << "#" << Campaigns.at(tmpCmpId).campaign_id << "#" << endl;
 
 			//Check if CDR file is greater than 10 MB make a new one.
 		/*	if (outfile.tellp() >= 100)
@@ -747,7 +747,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			}*/
 			//Insert Call records in DB
 			sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_calls(channel, campaign_id, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id, song_name, patch_dnis) \
-				VALUES(%d, '%s', 'Idea %s', '%s', '%s', '%s#%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s', '%s', '%s')",
+				VALUES(%d, '%s', 'Idea %s', '%s', '%s', '%s|%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s', '%s', '%s')",
 				ChInfo[i].CDRStatus.channel, Campaigns.at(tmpCmpId).campaign_id, circle, ChInfo[i].CDRStatus.ani, ChInfo[i].CDRStatus.cli, ChInfo[i].CDRStatus.dtmf, ChInfo[i].CDRStatus.dtmf2, ChInfo[i].CDRStatus.answer_duration,
 				StrCmpA(ChInfo[i].CDRStatus.status, "SUCCESS") == 0 ? 1 : 0, ChInfo[i].CDRStatus.callPatch_duration, dateVal, call_time, answer_time, end_time, ChInfo[i].CDRStatus.reason_code,
 				ChInfo[i].CDRStatus.total_duration, ChInfo[i].CDRStatus.reason, ChInfo[i].CDRStatus.encrypted_ani, ChInfo[i].CDRStatus.ani, timeVal, ChInfo[i].CDRStatus.songName, ChInfo[i].CDRStatus.DNIS);
@@ -762,12 +762,12 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			//logging correct consent recieved
 			if (StrCmpA(ChInfo[i].CDRStatus.firstConsent, "") && StrCmpA(ChInfo[i].CDRStatus.secondConsent, ""))
 			{
-				ConsentFile << "IDEA_HR" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].pPhoNumBuf
+				ConsentFile << circle << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].pPhoNumBuf
 					<< "#" << ChInfo[i].CDRStatus.firstConsent << "#" << ChInfo[i].CDRStatus.secondConsent << "#" << Campaigns.at(tmpCmpId).campaign_id << "#" << endl;
 			}
 			if (Campaigns.at(tmpCmpId).obdDialPlan == AcquisitionalOBDWith1stConsent && StrCmpA(ChInfo[i].CDRStatus.firstConsent, ""))
 			{
-				ConsentFile << "IDEA_HR" << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].pPhoNumBuf
+				ConsentFile << circle << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].pPhoNumBuf
 					<< "#" << ChInfo[i].CDRStatus.firstConsent << "#" << Campaigns.at(tmpCmpId).campaign_id << "#" << endl;
 			}
 			StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
@@ -779,6 +779,8 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			StrCpyA(ChInfo[i].CDRStatus.reason_code, "");
 			StrCpyA(ChInfo[i].CDRStatus.songName, "");
 			StrCpyA(ChInfo[i].CDRStatus.DNIS, "");
+			StrCpyA(ChInfo[i].CDRStatus.dtmfBuf, "");
+			StrCpyA(ChInfo[i].CDRStatus.DNISBuf, "");
 			ChInfo[i].isAvailable = true;
 		}
 	}//For loop
@@ -943,10 +945,11 @@ int CSpiceOBDDlg::GetAnIdleChannel() // Find an idle trunk channel for IVR call 
 	int i;
 	for (i = nIVRMinCh; i < nIVRMaxCh; i++)
 	{
-		if (!ChInfo[i].InUse && ChInfo[i].isIVRChannel) break;
+		if (SsmGetChState(i) == S_CALL_STANDBY)break;
+		//if (!ChInfo[i].InUse) break;
 	}
 
-	if (i == nTotalCh) return -1;
+	//if (i == nTotalCh) return -1;
 	return i;
 }
 
@@ -1073,7 +1076,7 @@ void CSpiceOBDDlg::DoUserWork()
 	int tempCampId;
 	IsUpdate = false;
 	WORD releaseCode;
-
+	logger.log(LOGERR, "DoUserWork Start");
 	for (int i = 0; i < nTotalCh; i++)
 	{
 		if (SsmGetChType(i) != 11) continue;
@@ -1089,11 +1092,11 @@ void CSpiceOBDDlg::DoUserWork()
 		case USER_IDLE:
 			ChInfo[i].lineState = SsmGetChState(i);
 			ChInfo[i].DTCounter = 0;//Initilize iteration counters...
-			ChInfo[i].repeatPromptNumber = 1;
+			ChInfo[i].levelNumber = 1;
 			if (ChInfo[i].lineState == S_CALL_STANDBY && ChInfo[i].EnCalled == false)
 			{
 				//Copy phone Numbers to auto dial
-				if (!Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling)
+				if (!Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling && IsDailingTimeUP)
 				{
 					StrCpyA(ChInfo[i].CDRStatus.cli, Campaigns.at(tempCampId).cliList.at(rand() % Campaigns.at(tempCampId).cliList.size()).c_str());//picking random CLI
 					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tempCampId).phnumBuf.front().ani);
@@ -1163,6 +1166,13 @@ void CSpiceOBDDlg::DoUserWork()
 				SsmStopPlay(i);
 				SsmClearRxDtmfBuf(i);
 				SsmHangup(i);
+				if (ChInfo[i].IVRChannelNumber != -1)
+				{
+					SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
+					ChInfo[i].IVRChannelNumber = -1;
+					SsmHangup(ChInfo[i].IVRChannelNumber);
+					ChInfo[ChInfo[i].IVRChannelNumber].InUse = false;
+				}
 				ChInfo[i].nStep = USER_IDLE;
 			}
 			break;
@@ -1435,7 +1445,7 @@ void CSpiceOBDDlg::DoUserWork()
 					break;
 				}
 				break;
-			case AcquisitionalOBDWith1stAnd2ndIVRConsent:
+			case AcquisitionalOBDWithIVRServiceCrossPromo:
 				switch (ChInfo[i].ConsentState) {
 				case 1:
 					ChInfo[i].mediaState = SsmCheckPlay(i);
@@ -1445,127 +1455,411 @@ void CSpiceOBDDlg::DoUserWork()
 						//StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
 						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
 						{
-							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
-								SsmStopPlay(i);
-								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = 3;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], -1, 0, -1) == -1)
+								//Get song details
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
+								int queryState, jumpLevel;
+
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, jump_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+
+								queryState = mysql_query(conn, songQuery);
+								logger.log(LOGINFO, "Song query: %s", songQuery);
+								if (queryState != 0)
 								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
+									CString err(mysql_error(conn));
+									AfxMessageBox(err);
 								}
-								ChInfo[i].IVRChannelNumber = GetAnIdleChannel();
-								if (SsmSetTxCallerId(ChInfo[i].IVRChannelNumber, ChInfo[i].pPhoNumBuf) == -1)
+
+								res = mysql_store_result(conn);
+								StrCpyA(songName, "");
+								StrCpyA(songCode, "");
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
+								jumpLevel = -1;
+								if ((row = mysql_fetch_row(res)) != NULL)
 								{
-									getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
+									StrCpyA(songName, row[0]);
+									StrCpyA(levelType, row[2]);
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
+									{
+										sprintf_s(songCode, "%07s", row[1]);
+									}
+									else
+									{
+										StrCpyA(songCode, row[1]);
+									}
+									StrCpyA(patchDNIS, row[3]);
+									jumpLevel = atoi(row[4]);
 								}
-								//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
-								if (SsmAutoDial(ChInfo[i].IVRChannelNumber, "520622315073") == -1)
+								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
+								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
+								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
-									LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
-									HangupIVRCall(ChInfo[i].IVRChannelNumber);
-									HangupCall(i);
+									SsmStopPlay(i);
+									SsmClearRxDtmfBuf(i);
+									ChInfo[i].ConsentState = 4;
+									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
+									ChInfo[i].IVRChannelNumber = GetAnIdleChannel();
+									if (SsmSetTxCallerId(ChInfo[i].IVRChannelNumber, ChInfo[i].pPhoNumBuf) == -1)
+									{
+										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
+									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpIA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
+									/*char DTNumberToBeDialed[31];
+									StrCpyA(DTNumberToBeDialed, "5206005");
+									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
+									StrCatA(DTNumberToBeDialed, "8045");
+									StrCatA(DTNumberToBeDialed, songCode);
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
+									{
+										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
+										HangupIVRCall(ChInfo[i].IVRChannelNumber);
+										HangupCall(i);
+									}
+									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									ChInfo[i].levelNumber = jumpLevel;
+									ChInfo[i].DTCounter = 0;
+									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								}
-								ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-								logger.log(LOGINFO, "CLI to IVR: %s, DNIS: 520622315073", ChInfo[i].pPhoNumBuf);
-								//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+								else //Wrong Input
+								{
+									SsmStopPlay(i);
+									SsmClearRxDtmfBuf(i);
+									ChInfo[i].ConsentState = 7;
+									ChInfo[i].levelNumber = 1;
+									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
+									//SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
+								}
 							}
-							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No Input
+							else  //No Input
 							{
 								SsmStopPlay(i);
-								ChInfo[i].ConsentState = 2;
+								ChInfo[i].ConsentState = 7;
+								ChInfo[i].levelNumber = 2;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[2], -1, 0, -1) == -1)
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
 								}
-								int pnFormat; long pnTime;
-								if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
-								{
-									WORD wTimeOut = pnTime / 1000 + 5;
-									SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
-								}
+								//int pnFormat; long pnTime;
+								//if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+								//{
+								//	WORD wTimeOut = pnTime/1000 + 5;
+								//	SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
+								//}
 								//SsmSetWaitDtmfExA(i, 18000, 1, "1", true);
-							}
-							else //Wrong input
-							{
-								SsmStopPlay(i);
-								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = 4;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], -1, 0, -1) == -1)
-								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
-								}
-								//SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
 							}
 						}
 					}
 					break;
 				case 2:
 					ChInfo[i].mediaState = SsmCheckPlay(i);
+					//logger.log(LOGINFO, "Media state: %d, ph Number: %s", ChInfo[i].mediaState, ChInfo[i].pPhoNumBuf);
 					if (ChInfo[i].mediaState >= 0)
 					{
+						//StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
 						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
 						{
-							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
-								SsmStopPlay(i);
-								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = 3;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], -1, 0, -1) == -1)
+								//Get song details
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
+								int queryState, jumpLevel;
+
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, jump_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+
+								queryState = mysql_query(conn, songQuery);
+								logger.log(LOGINFO, "Song query: %s", songQuery);
+								if (queryState != 0)
 								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
+									CString err(mysql_error(conn));
+									AfxMessageBox(err);
 								}
-								ChInfo[i].IVRChannelNumber = GetAnIdleChannel();
-								if (SsmSetTxCallerId(ChInfo[i].IVRChannelNumber, ChInfo[i].pPhoNumBuf) == -1)
+
+								res = mysql_store_result(conn);
+								StrCpyA(songName, "");
+								StrCpyA(songCode, "");
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
+								jumpLevel = -1;
+								if ((row = mysql_fetch_row(res)) != NULL)
 								{
-									getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
+									StrCpyA(songName, row[0]);
+									StrCpyA(levelType, row[2]);
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
+									{
+										sprintf_s(songCode, "%07s", row[1]);
+									}
+									else
+									{
+										StrCpyA(songCode, row[1]);
+									}
+									StrCpyA(patchDNIS, row[3]);
+									jumpLevel = atoi(row[4]);
 								}
-								//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
-								if (SsmAutoDial(ChInfo[i].IVRChannelNumber, "520622315073") == -1)
+								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
+								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
+								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
-									LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
-									HangupIVRCall(ChInfo[i].IVRChannelNumber);
-									HangupCall(i);
+									SsmStopPlay(i);
+									SsmClearRxDtmfBuf(i);
+									ChInfo[i].ConsentState = 4;
+									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
+									ChInfo[i].IVRChannelNumber = GetAnIdleChannel();
+									if (SsmSetTxCallerId(ChInfo[i].IVRChannelNumber, ChInfo[i].pPhoNumBuf) == -1)
+									{
+										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
+									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpIA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
+									/*char DTNumberToBeDialed[31];
+									StrCpyA(DTNumberToBeDialed, "5206005");
+									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
+									StrCatA(DTNumberToBeDialed, "8045");
+									StrCatA(DTNumberToBeDialed, songCode);
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
+									{
+										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
+										HangupIVRCall(ChInfo[i].IVRChannelNumber);
+										HangupCall(i);
+									}
+									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									ChInfo[i].levelNumber = jumpLevel;
+									ChInfo[i].DTCounter = 0;
+									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
 								}
-								ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-								logger.log(LOGINFO, "CLI to IVR: %s, DNIS: 520622315073", ChInfo[i].pPhoNumBuf);
-								//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+								else //Wrong Input
+								{
+									SsmStopPlay(i);
+									SsmClearRxDtmfBuf(i);
+									ChInfo[i].ConsentState = 7;
+									ChInfo[i].levelNumber = 2;
+									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
+									//SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
+								}
 							}
-							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No input
+							else  //No Input
 							{
 								SsmStopPlay(i);
-								ChInfo[i].ConsentState = 4;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], -1, 0, -1) == -1)
+								ChInfo[i].ConsentState = 7;
+								ChInfo[i].levelNumber = 3;
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
 								}
-							}
-							else //Wrong input
-							{
-								SsmStopPlay(i);
-								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = 4;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], -1, 0, -1) == -1)
-								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
-								}
+								//int pnFormat; long pnTime;
+								//if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+								//{
+								//	WORD wTimeOut = pnTime/1000 + 5;
+								//	SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
+								//}
+								//SsmSetWaitDtmfExA(i, 18000, 1, "1", true);
 							}
 						}
 					}
 					break;
 				case 3:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					//logger.log(LOGINFO, "Media state: %d, ph Number: %s", ChInfo[i].mediaState, ChInfo[i].pPhoNumBuf);
+					if (ChInfo[i].mediaState >= 0)
+					{
+						//StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
+						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
+						{
+							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
+							{
+								//Get song details
+								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
+								int queryState, jumpLevel;
+
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s'), jump_level as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 3",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
+
+								queryState = mysql_query(conn, songQuery);
+								logger.log(LOGINFO, "Song query: %s", songQuery);
+								if (queryState != 0)
+								{
+									CString err(mysql_error(conn));
+									AfxMessageBox(err);
+								}
+
+								res = mysql_store_result(conn);
+								StrCpyA(songName, "");
+								StrCpyA(songCode, "");
+								StrCpyA(levelType, "");
+								StrCpyA(patchDNIS, "");
+								jumpLevel = -1;
+								if ((row = mysql_fetch_row(res)) != NULL)
+								{
+									StrCpyA(songName, row[0]);
+									StrCpyA(levelType, row[2]);
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
+									{
+										sprintf_s(songCode, "%07s", row[1]);
+									}
+									else
+									{
+										StrCpyA(songCode, row[1]);
+									}
+									StrCpyA(patchDNIS, row[3]);
+									jumpLevel = atoi(row[4]);
+								}
+								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
+								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
+								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
+								{
+									SsmStopPlay(i);
+									SsmClearRxDtmfBuf(i);
+									ChInfo[i].ConsentState = 4;
+									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
+									ChInfo[i].IVRChannelNumber = GetAnIdleChannel();
+									if (SsmSetTxCallerId(ChInfo[i].IVRChannelNumber, ChInfo[i].pPhoNumBuf) == -1)
+									{
+										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
+									}
+									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
+									{
+										std::string tmpDNIS = patchDNIS;
+										std::string tmpDTMF = "X";
+										if (StrCmpIA(levelType, "DT") == 0)
+										{
+											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+										}
+										else
+										{
+											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+										}
+										StrCatA(patchDNIS, songCode);
+										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+									}
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
+									/*char DTNumberToBeDialed[31];
+									StrCpyA(DTNumberToBeDialed, "5206005");
+									StrCatA(DTNumberToBeDialed, ChInfo[i].CDRStatus.dtmf);
+									StrCatA(DTNumberToBeDialed, "8045");
+									StrCatA(DTNumberToBeDialed, songCode);
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, DTNumberToBeDialed);*/
+									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
+									{
+										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
+										HangupIVRCall(ChInfo[i].IVRChannelNumber);
+										HangupCall(i);
+									}
+									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
+									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									ChInfo[i].levelNumber = jumpLevel;
+									ChInfo[i].DTCounter = 0;
+									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
+								}
+								else //Wrong Input
+								{
+									SsmStopPlay(i);
+									SsmClearRxDtmfBuf(i);
+									ChInfo[i].ConsentState = 7;
+									ChInfo[i].levelNumber = 3;
+									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
+									//SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
+								}
+							}
+							else  //No Input
+							{
+								SsmStopPlay(i);
+								ChInfo[i].ConsentState = 7;
+								ChInfo[i].levelNumber = 3;
+								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
+								{
+									LogErrorCodeAndMessage(i);
+									HangupCall(i);
+								}
+
+								//SsmSetWaitDtmfExA(i, 18000, 1, "1", true);
+							}
+						}
+					}
+					break;
+				case 4:
 					switch (SsmChkAutoDial(ChInfo[i].IVRChannelNumber))
 					{
 					case DIAL_VOICE:
@@ -1633,18 +1927,118 @@ void CSpiceOBDDlg::DoUserWork()
 					}
 					break;
 				case 5:
-					if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING)
+					if (SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING && ChInfo[i].levelNumber != -1)
 					{
 						StrCpyA(ChInfo[i].CDRStatus.dtmf2, SsmGetDtmfStrA(i));
+						
+						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.dtmf);
+						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, "|");
+						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.dtmf2);
+						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, "$");
+						StrCatA(ChInfo[i].CDRStatus.DNISBuf, ChInfo[i].CDRStatus.DNIS);
+						StrCatA(ChInfo[i].CDRStatus.DNISBuf, "|");
+						StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
+						StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
+						StrCpyA(ChInfo[i].CDRStatus.DNIS, "");
+
+						SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
+						HangupIVRCall(ChInfo[i].IVRChannelNumber);
+
+						ChInfo[i].ConsentState = ChInfo[i].levelNumber;
+						//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+						if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].levelNumber], -1, 0, -1) == -1)
+						{
+							LogErrorCodeAndMessage(i);
+							HangupCall(i);
+						}
+						int pnFormat; long pnTime;
+						if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+						{
+							WORD wTimeOut = pnTime / 1000 + 5;
+							SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
+						}
+						
+						char dateVal[25], timeVal[15];
+					
+						tm dateTime = logger.getTime(dateVal);
+						sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
+						sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
+						ConsentFile << circle << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].pPhoNumBuf
+							<< "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#" << ChInfo[i].CDRStatus.DNIS<< "#" << Campaigns.at(tempCampId).campaign_id << "#" << endl;
+						SsmClearRxDtmfBuf(i);
+						logger.log(LOGINFO, "call patchup Disconnected..");
+					}
+					else if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING)
+					{
+						StrCpyA(ChInfo[i].CDRStatus.dtmf2, SsmGetDtmfStrA(i));
+						
+						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.dtmf);
+						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, "|");
+						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.dtmf2);
+						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, "$");
+						StrCatA(ChInfo[i].CDRStatus.DNISBuf, ChInfo[i].CDRStatus.DNIS);
+						StrCatA(ChInfo[i].CDRStatus.DNISBuf, "|");
+						StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
+						StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
+						StrCpyA(ChInfo[i].CDRStatus.DNIS, "");
+
 						SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
 						HangupCall(i);
 						HangupIVRCall(ChInfo[i].IVRChannelNumber);
+						
+						char dateVal[25], timeVal[15];
+
+						tm dateTime = logger.getTime(dateVal);
+						sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
+						sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
+						ConsentFile << circle << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].pPhoNumBuf
+							<< "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#" << ChInfo[i].CDRStatus.DNIS << "#" << Campaigns.at(tempCampId).campaign_id << "#" << endl;
+						SsmClearRxDtmfBuf(i);
 						logger.log(LOGINFO, "call patchup Disconnected..");
 					}
+
 					break;
-				case 4:
+				case 6:
+					ChInfo[i].mediaState = SsmCheckPlay(i);
+					if (ChInfo[i].mediaState >= 1 || SsmGetChState(i) == S_CALL_PENDING)
+					{
+						HangupCall(i);
+					}
+					break;
+				case 7:
 					ChInfo[i].mediaState = SsmCheckPlay(i);
 					if (ChInfo[i].mediaState >= 1)
+					{
+						SsmStopPlay(i);
+						if (++ChInfo[i].DTCounter < 3)
+						{
+							ChInfo[i].ConsentState = ChInfo[i].levelNumber;
+							//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+							if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].levelNumber], -1, 0, -1) == -1)
+							{
+								LogErrorCodeAndMessage(i);
+								HangupCall(i);
+							}
+							int pnFormat; long pnTime;
+							if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+							{
+								WORD wTimeOut = pnTime / 1000 + 5;
+								SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
+							}
+						}
+						else
+						{
+							SsmStopPlay(i);
+							ChInfo[i].ConsentState = 6;
+							//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+							if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[5], -1, 0, -1) == -1)
+							{
+								LogErrorCodeAndMessage(i);
+								HangupCall(i);
+							}
+						}
+					}
+					if (SsmGetChState(i) == S_CALL_PENDING)
 					{
 						HangupCall(i);
 					}
@@ -1690,7 +2084,8 @@ void CSpiceOBDDlg::DoUserWork()
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
+									StrCpyA(levelType, row[2]);
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -1698,11 +2093,11 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									StrCpyA(levelType, row[2]);
+									
 									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
-								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
+								logger.log(LOGINFO, "song name:[%s], song code : [%s], levelType : [%s]", songName, songCode, levelType);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
 									SsmStopPlay(i);
@@ -1723,7 +2118,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										std::string tmpDNIS = patchDNIS;
 										std::string tmpDTMF = "X";
-										if (StrCmpA(levelType, "DT") == 0)
+										if (StrCmpIA(levelType, "DT") == 0)
 										{
 											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
@@ -1737,7 +2132,7 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
-									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
@@ -1823,7 +2218,8 @@ void CSpiceOBDDlg::DoUserWork()
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
+									StrCpyA(levelType, row[2]);
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -1831,11 +2227,11 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									StrCpyA(levelType, row[2]);
+									
 									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
-								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
+								logger.log(LOGINFO, "song name: [%s], song code : [%s], levelType: [%s]", songName, songCode, levelType);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
 									SsmStopPlay(i);
@@ -1856,7 +2252,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										std::string tmpDNIS = patchDNIS;
 										std::string tmpDTMF = "X";
-										if (StrCmpA(levelType, "DT") == 0)
+										if (StrCmpIA(levelType, "DT") == 0)
 										{
 											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
@@ -1870,7 +2266,7 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
-									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
@@ -1991,7 +2387,7 @@ void CSpiceOBDDlg::DoUserWork()
 						SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
 						HangupCall(i);
 						HangupIVRCall(ChInfo[i].IVRChannelNumber);
-						logger.log(LOGINFO, "call patchup Disconnected..");
+						logger.log(LOGINFO, "call patchup Disconnected...");
 					}
 					break;
 				case 4:
@@ -2059,7 +2455,9 @@ void CSpiceOBDDlg::DoUserWork()
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
+									StrCpyA(levelType, row[2]);
+
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -2067,11 +2465,11 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									StrCpyA(levelType, row[2]);
+									
 									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
-								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
+								logger.log(LOGINFO, "song name: [%s], song code : [%s] , levelType: [%s]", songName, songCode, levelType);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
 								{
 									SsmStopPlay(i);
@@ -2092,7 +2490,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										std::string tmpDNIS = patchDNIS;
 										std::string tmpDTMF = "X";
-										if (StrCmpA(levelType, "DT") == 0)
+										if (StrCmpIA(levelType, "DT") == 0)
 										{
 											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
@@ -2129,7 +2527,7 @@ void CSpiceOBDDlg::DoUserWork()
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 7;
-									ChInfo[i].repeatPromptNumber = 1;
+									ChInfo[i].levelNumber = 1;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
 									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[5], -1, 0, -1) == -1)
 									{
@@ -2143,7 +2541,7 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 7;
-								ChInfo[i].repeatPromptNumber = 2;
+								ChInfo[i].levelNumber = 2;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
 								{
@@ -2194,7 +2592,8 @@ void CSpiceOBDDlg::DoUserWork()
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
+									StrCpyA(levelType, row[2]);
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -2202,7 +2601,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									StrCpyA(levelType, row[2]);
+									
 									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -2227,7 +2626,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										std::string tmpDNIS = patchDNIS;
 										std::string tmpDTMF = "X";
-										if (StrCmpA(levelType, "DT") == 0)
+										if (StrCmpIA(levelType, "DT") == 0)
 										{
 											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
@@ -2264,7 +2663,7 @@ void CSpiceOBDDlg::DoUserWork()
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 7;
-									ChInfo[i].repeatPromptNumber = 2;
+									ChInfo[i].levelNumber = 2;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
 									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[5], -1, 0, -1) == -1)
 									{
@@ -2278,7 +2677,7 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 7;
-								ChInfo[i].repeatPromptNumber = 2;
+								ChInfo[i].levelNumber = 2;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
 								{
@@ -2329,7 +2728,8 @@ void CSpiceOBDDlg::DoUserWork()
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
+									StrCpyA(levelType, row[2]);
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -2337,7 +2737,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									StrCpyA(levelType, row[2]);
+									
 									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -2362,7 +2762,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										std::string tmpDNIS = patchDNIS;
 										std::string tmpDTMF = "X";
-										if (StrCmpA(levelType, "DT") == 0)
+										if (StrCmpIA(levelType, "DT") == 0)
 										{
 											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
@@ -2514,9 +2914,9 @@ void CSpiceOBDDlg::DoUserWork()
 						SsmStopPlay(i);
 						if (++ChInfo[i].DTCounter < 3)
 						{
-							ChInfo[i].ConsentState = ChInfo[i].repeatPromptNumber;
+							ChInfo[i].ConsentState = ChInfo[i].levelNumber;
 							//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-							if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].repeatPromptNumber], -1, 0, -1) == -1)
+							if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].levelNumber], -1, 0, -1) == -1)
 							{
 								LogErrorCodeAndMessage(i);
 								HangupCall(i);
@@ -2581,7 +2981,8 @@ void CSpiceOBDDlg::DoUserWork()
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
+									StrCpyA(levelType, row[2]);
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -2589,7 +2990,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									StrCpyA(levelType, row[2]);
+									
 									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -2614,7 +3015,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										std::string tmpDNIS = patchDNIS;
 										std::string tmpDTMF = "X";
-										if (StrCmpA(levelType, "DT") == 0)
+										if (StrCmpIA(levelType, "DT") == 0)
 										{
 											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
@@ -2651,7 +3052,7 @@ void CSpiceOBDDlg::DoUserWork()
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 7;
-									ChInfo[i].repeatPromptNumber = 1;
+									ChInfo[i].levelNumber = 1;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
 									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
 									{
@@ -2665,7 +3066,7 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 7;
-								ChInfo[i].repeatPromptNumber = 2;
+								ChInfo[i].levelNumber = 2;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
 								{
@@ -2716,7 +3117,8 @@ void CSpiceOBDDlg::DoUserWork()
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
+									StrCpyA(levelType, row[2]);
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -2724,7 +3126,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									StrCpyA(levelType, row[2]);
+									
 									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -2749,7 +3151,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										std::string tmpDNIS = patchDNIS;
 										std::string tmpDTMF = "X";
-										if (StrCmpA(levelType, "DT") == 0)
+										if (StrCmpIA(levelType, "DT") == 0)
 										{
 											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
@@ -2786,7 +3188,7 @@ void CSpiceOBDDlg::DoUserWork()
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 7;
-									ChInfo[i].repeatPromptNumber = 2;
+									ChInfo[i].levelNumber = 2;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
 									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
 									{
@@ -2800,7 +3202,7 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 7;
-								ChInfo[i].repeatPromptNumber = 3;
+								ChInfo[i].levelNumber = 3;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
 								{
@@ -2851,7 +3253,8 @@ void CSpiceOBDDlg::DoUserWork()
 								if ((row = mysql_fetch_row(res)) != NULL)
 								{
 									StrCpyA(songName, row[0]);
-									if (strlen(row[1]) < 7 && (StrCmpA(levelType, "DT") == 0))
+									StrCpyA(levelType, row[2]);
+									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
 										sprintf_s(songCode, "%07s", row[1]);
 									}
@@ -2859,7 +3262,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									StrCpyA(levelType, row[2]);
+									
 									StrCpyA(patchDNIS, row[3]);
 								}
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -2884,7 +3287,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										std::string tmpDNIS = patchDNIS;
 										std::string tmpDTMF = "X";
-										if (StrCmpA(levelType, "DT") == 0)
+										if (StrCmpIA(levelType, "DT") == 0)
 										{
 											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
@@ -3036,9 +3439,9 @@ void CSpiceOBDDlg::DoUserWork()
 						SsmStopPlay(i);
 						if (++ChInfo[i].DTCounter < 3)
 						{
-							ChInfo[i].ConsentState = ChInfo[i].repeatPromptNumber;
+							ChInfo[i].ConsentState = ChInfo[i].levelNumber;
 							//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-							if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].repeatPromptNumber], -1, 0, -1) == -1)
+							if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].levelNumber], -1, 0, -1) == -1)
 							{
 								LogErrorCodeAndMessage(i);
 								HangupCall(i);
@@ -3264,6 +3667,7 @@ void CSpiceOBDDlg::DoUserWork()
 			break;
 		}//end switch
 	}//end for
+	logger.log(LOGERR, "DoUserWork End");
 }
 
 BOOL CSpiceOBDDlg::InitCtiBoard()
@@ -3389,6 +3793,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
 			systemIpAddr = Utils::GetIPAdd();
 			IsStartDialling = false;
+			IsDailingTimeUP = true;
 			openCDRLogFile();
 			openConsentLogFile();
 			//Initialization of channels on trunk-board
@@ -3397,6 +3802,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			for (int i = 0; i < nTotalCh; i++)
 			{
 				ChInfo[i].EnCalled = false;
+				ChInfo[i].IVRChannelNumber = -1;
 				ChInfo[i].isIVRChannel = false;
 				ChInfo[i].isAvailable = true;
 				//ChInfo[i].rowTobeUpdated = false;
@@ -3421,6 +3827,8 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
 					StrCpyA(ChInfo[i].CDRStatus.dtmf, "");
 					StrCpyA(ChInfo[i].CDRStatus.dtmf2, "");
+					StrCpyA(ChInfo[i].CDRStatus.dtmfBuf, "");
+					StrCpyA(ChInfo[i].CDRStatus.DNISBuf, "");
 					StrCpyA(ChInfo[i].CDRStatus.firstConsent, "");
 					StrCpyA(ChInfo[i].CDRStatus.secondConsent, "");
 					StrCpyA(ChInfo[i].CDRStatus.songName, "");
@@ -3482,8 +3890,23 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 	// TODO: Add your message handler code here and/or call default
 	try
 	{
+		logger.log(LOGERR, "On Timer Start");
+		//Number should be dialled only between 8AM IST to 8:45 PM IST 
+		char dateVal[25];
+		tm dateTime = logger.getTime(dateVal);
+		if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 8 || dateTime.tm_hour >= 21)
+		{
+			IsDailingTimeUP = false;
+			//logger.log(LOGINFO, "Dailling false hour: %d, Minute : %d", dateTime.tm_hour, dateTime.tm_min);
+		}
+		else
+		{
+			IsDailingTimeUP = true;
+			//logger.log(LOGINFO, "Dailling true hour: %d, Minute : %d", dateTime.tm_hour, dateTime.tm_min);
+		}
 		DoUserWork();
 		UpDateATrunkChListCtrl();
+		logger.log(LOGERR, "On Timer End");
 	}
 	catch (...)
 	{
@@ -3503,7 +3926,7 @@ void CSpiceOBDDlg::OnBnClickedLogLevel()
 {
 	UpdateData();
 	logger.SetMinLogLevel(m_SetMinLogLevel);
-	logger.log(LOGFATAL, "Minimum Log level:%d", m_SetMinLogLevel);
+	//logger.log(LOGFATAL, "Minimum Log level:%d", m_SetMinLogLevel);
 }
 
 void CSpiceOBDDlg::OnDestroy()

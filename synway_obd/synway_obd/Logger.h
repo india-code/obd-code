@@ -6,9 +6,9 @@
 enum LogLevel
 {
 	LOGTRACE = 0,
-	LOGDEBUG,
+	//LOGDEBUG,
 	LOGINFO,
-	LOGWARNING,
+	//LOGWARNING,
 	LOGERR,
 	LOGFATAL
 };
@@ -89,7 +89,7 @@ public:
 		tm timeVal = getTime(timeValue);
 		sprintf_s(fileName, "Application_%02d%02d%02d.log", timeVal.tm_hour, timeVal.tm_min, timeVal.tm_sec);
 		StrCpyA(CurFilePath, fileName);
-		fopen_s(&fp, fileName, "a");
+		fopen_s(&fp, fileName, "a+");
 	}
 	void SetMinLogLevel(int minLogLevel)
 	{
@@ -106,11 +106,11 @@ public:
 		va_start(args, format);
 		switch (logger) {
 		case 0:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Trace   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Debug   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 2:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Info    : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Warning : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 4:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Error   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 5:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+		//case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Debug   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+		case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Info    : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+		//case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Warning : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+		case 2:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Error   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+		case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
 		}
 		va_end(args);
 		if (ftell(fp) >= 10000000)
