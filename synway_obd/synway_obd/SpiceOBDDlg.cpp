@@ -1036,6 +1036,8 @@ void CSpiceOBDDlg::HangupCall(int ch)
 		ChInfo[ch].IVRChannelNumber = -1;
 		SsmHangup(ChInfo[ch].IVRChannelNumber);
 		ChInfo[ChInfo[ch].IVRChannelNumber].InUse = false;
+		m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 3, L"");
+		m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 4, L"");
 	}
 	SsmClearRxDtmfBuf(ch);
 	SsmStopPlay(ch);
@@ -1594,9 +1596,9 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
 									//Set cli and DNIS for call patchedup
-									/*CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
 									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
-									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);*/
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
@@ -1738,9 +1740,9 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
 									//Set cli and DNIS for call patchedup
-									/*CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
 									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
-									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);*/
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
@@ -1882,9 +1884,9 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
 									//Set cli and DNIS for call patchedup
-									/*CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
 									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
-									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);*/
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
@@ -2021,7 +2023,8 @@ void CSpiceOBDDlg::DoUserWork()
 
 						SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
 						HangupIVRCall(ChInfo[i].IVRChannelNumber);
-
+						m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, L"");
+						m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, L"");
 						ChInfo[i].ConsentState = ChInfo[i].levelNumber;
 						//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 						if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].levelNumber], -1, 0, -1) == -1)
@@ -2044,7 +2047,7 @@ void CSpiceOBDDlg::DoUserWork()
 						ConsentFile << circle << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].pPhoNumBuf
 							<< "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#" << ChInfo[i].CDRStatus.DNIS<< "#" << Campaigns.at(tempCampId).campaign_id << "#" << endl;
 						//SsmClearRxDtmfBuf(i);
-						logger.log(LOGINFO, "call patchup Disconnected..");
+						//logger.log(LOGINFO, "call patchup Disconnected..");
 					}
 					else if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING)
 					{
@@ -2208,7 +2211,11 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
-									logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									//Set cli and DNIS for call patchedup
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
@@ -2343,7 +2350,11 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
-									logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									//Set cli and DNIS for call patchedup
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
+									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
 									StrCpyA(DTNumberToBeDialed, "5206005");
@@ -2586,6 +2597,10 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
+									//Set cli and DNIS for call patchedup
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
@@ -2723,6 +2738,10 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
+									//Set cli and DNIS for call patchedup
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
@@ -2860,6 +2879,10 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
+									//Set cli and DNIS for call patchedup
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
@@ -3114,6 +3137,10 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
+									//Set cli and DNIS for call patchedup
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
@@ -3251,6 +3278,10 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
+									//Set cli and DNIS for call patchedup
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
@@ -3388,6 +3419,10 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
+									//Set cli and DNIS for call patchedup
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
 									//StrCpyA(ChInfo[ChInfo[]].pPhoNumBuf, "520622315073");
 									/*char DTNumberToBeDialed[31];
@@ -3776,7 +3811,7 @@ BOOL CSpiceOBDDlg::InitCtiBoard()
 		PostQuitMessage(0);
 		return false;
 	}
-	AfxMessageBox(L"Card Initilized !!");
+	//AfxMessageBox(L"Card Initilized !!");
 	return true;
 }
 
