@@ -116,6 +116,7 @@ typedef struct
 	vector<pnNumWithEncryptedAni> phnumBuf;
 	vector<std::string> cliList;
 	//char CLI[31];
+	char first_consent_digit[5];
 	int channelsAllocated;
 	BOOL isCampaignCompleted;
 	char promptsDirectory[100];
@@ -138,7 +139,7 @@ private:
 
 public:
 	WORD	nTotalCh;
-	int nIVRMinCh, nIVRMaxCh;
+	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh;
 	char circle[20], zone[20];
 	CH_INFO* ChInfo;
 	CLogger logger;
@@ -154,6 +155,7 @@ public:
 	map<int, CampaignData> Campaigns;
 
 	BOOL UpdatePhNumbersStatus(int ch);
+	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();
 	BOOL isCampaignChannelsCleared(int campaignKey);
 	int GetAnIdleChannel();
