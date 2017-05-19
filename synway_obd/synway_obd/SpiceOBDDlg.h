@@ -148,7 +148,8 @@ public:
 	AESEncryption aesEncryption;
 	bool IsUpdate;
 	BOOL IsStartDialling;
-	BOOL IsDailingTimeUP;
+	BOOL IsDailingTimeInRange;
+	BOOL IsTimerOn;
 	char *systemIpAddr;
 	ofstream outfile;
 	ofstream ConsentFile;

@@ -143,8 +143,8 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 		PostQuitMessage(0);
 	}
 	//GetDBData();
-	SetTimer(1000, 200, NULL);
-
+	//SetTimer(1000, 200, NULL);
+	IsTimerOn = false;
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
@@ -1161,7 +1161,7 @@ void CSpiceOBDDlg::DoUserWork()
 			if (ChInfo[i].lineState == S_CALL_STANDBY && ChInfo[i].EnCalled == false)
 			{
 				//Copy phone Numbers to auto dial
-				if (!Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling && IsDailingTimeUP)
+				if (!Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling && IsDailingTimeInRange)
 				{
 					StrCpyA(ChInfo[i].CDRStatus.cli, Campaigns.at(tempCampId).cliList.at(rand() % Campaigns.at(tempCampId).cliList.size()).c_str());//picking random CLI
 					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tempCampId).phnumBuf.front().ani);
@@ -3915,7 +3915,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
 			systemIpAddr = Utils::GetIPAdd();
 			IsStartDialling = false;
-			IsDailingTimeUP = true;
+			IsDailingTimeInRange = true;
 			openCDRLogFile();
 			openConsentLogFile();
 			//Initialization of channels on trunk-board
@@ -4019,12 +4019,26 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 		tm dateTime = logger.getTime(dateVal);
 		if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 8 || dateTime.tm_hour >= 21)
 		{
-			IsDailingTimeUP = false;
+			IsDailingTimeInRange = false;
+			BOOL isAllChannelsCleared = true;
+			for (size_t campKey = 1; campKey <= Campaigns.size(); campKey++)
+			{
+				if (!isCampaignChannelsCleared(campKey))
+				{
+					isAllChannelsCleared = false;
+					break;
+				}
+			}
+			if (IsTimerOn && isAllChannelsCleared)
+			{
+				KillTimer(1000);
+				IsTimerOn = false;
+			}
 			//logger.log(LOGINFO, "Dailling false hour: %d, Minute : %d", dateTime.tm_hour, dateTime.tm_min);
 		}
 		else
 		{
-			IsDailingTimeUP = true;
+			IsDailingTimeInRange = true;
 			//logger.log(LOGINFO, "Dailling true hour: %d, Minute : %d", dateTime.tm_hour, dateTime.tm_min);
 		}
 		DoUserWork();
@@ -4066,6 +4080,11 @@ void CSpiceOBDDlg::OnBnClickedDiallingStart()
 {
 	IsStartDialling = true;
 	SetDiallingStartStopBtn(false);
+	if (!IsTimerOn)
+	{
+		SetTimer(1000, 200, NULL);
+		IsTimerOn = true;
+	}
 }
 
 
