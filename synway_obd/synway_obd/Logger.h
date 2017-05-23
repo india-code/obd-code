@@ -120,6 +120,7 @@ public:
 			openLoggerFile();
 		}
 		fflush(fp);
+		free(time_value);
 	}
 
 	~CLogger()

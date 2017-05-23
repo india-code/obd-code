@@ -145,6 +145,7 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 	//GetDBData();
 	//SetTimer(1000, 200, NULL);
 	IsTimerOn = false;
+	OnBnClickedDiallingStart();
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
@@ -169,6 +170,7 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	GetPrivateProfileStringA("Database", "password", "sdl@1234", password, 255, InitDBSettings);
 
 	port = GetPrivateProfileIntA("Database", "Port", 3306, InitDBSettings);
+	CGMaxCHNum = GetPrivateProfileIntA("Database", "CGMaxCHNum", 30, InitDBSettings);
 	//nTotalCh = GetPrivateProfileIntA("Database", "TotalChannelsCount", 90, InitDBSettings);
 	logger.log(LOGINFO, "host: %s, username: %s, password: %s, dbname: %s, port: %d", host, username, password, DBName, port);
 
@@ -236,7 +238,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 	res = mysql_store_result(conn);
 
 	CampaignData tempdata;
-	int campKey = 1, channelsOccupied = 29;//-1;
+	int campKey = 1, channelsOccupied = CGMaxCHNum - 1;//-1;
 
 	StrCpyA(circle, "");
 	StrCpyA(zone, "");
@@ -317,15 +319,22 @@ BOOL CSpiceOBDDlg::GetDBData()
 				CString err(mysql_error(conn));
 				AfxMessageBox(err);
 			}
-
+			while (!Campaigns.at(campKey).phnumBuf.empty())
+			{
+				delete Campaigns.at(campKey).phnumBuf.front().ani;
+				Campaigns.at(campKey).phnumBuf.erase(Campaigns.at(campKey).phnumBuf.begin());
+			}
 			MYSQL_RES * resPhBuf = mysql_store_result(conn);
 			MYSQL_ROW rowPhBuf;
 			Campaigns.at(campKey).phnumBuf.clear();
 			while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
 			{
+				size_t curIndex = Campaigns.at(campKey).phnumBuf.size();
 				char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
-				Campaigns.at(campKey).phnumBuf.push_back({ DecryptedVal, rowPhBuf[0] });
+				Campaigns.at(campKey).phnumBuf.push_back({ DecryptedVal, "" });
+				StrCpyA(Campaigns.at(campKey).phnumBuf.at(curIndex).encryptedAni, rowPhBuf[0]);
 			}
+			mysql_free_result(resPhBuf);
 		}
 		//copying circle and zone to the global variables
 		if (!StrCmpA(circle, "") && !StrCmpA(zone, ""))
@@ -380,7 +389,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 		//}//End For
 		campKey++;
 	}
-	
+	mysql_free_result(res);
 	//get total ports and cg ports and campaign wise distribution
 	sprintf_s(queryStr, "select total_ports, cgport from tbl_port_manager where zone = '%s' and circle = '%s'", zone, circle);
 	logger.log(LOGINFO, "Select ports query:  %s", queryStr);
@@ -400,8 +409,9 @@ BOOL CSpiceOBDDlg::GetDBData()
 		int cgports = atoi(rowPhBuf[1]);
 		nTotalCh = totalch + cgports;
 		nIVRMinCh = 0;//totalch;
-		nIVRMaxCh = 29;//nTotalCh;
+		nIVRMaxCh = CGMaxCHNum - 1;//nTotalCh;
 	}
+	mysql_free_result(resPhBuf);
 	logger.log(LOGINFO, "total Ports: %d, minIvrCh: %d", nTotalCh, nIVRMinCh);
 
 	return true;
@@ -1558,6 +1568,7 @@ void CSpiceOBDDlg::DoUserWork()
 									StrCpyA(patchDNIS, row[3]);
 									jumpLevel = atoi(row[4]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -1702,6 +1713,7 @@ void CSpiceOBDDlg::DoUserWork()
 									StrCpyA(patchDNIS, row[3]);
 									jumpLevel = atoi(row[4]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -1846,6 +1858,7 @@ void CSpiceOBDDlg::DoUserWork()
 									StrCpyA(patchDNIS, row[3]);
 									jumpLevel = atoi(row[4]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -2174,6 +2187,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								logger.log(LOGINFO, "song name:[%s], song code : [%s], levelType : [%s]", songName, songCode, levelType);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -2313,6 +2327,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								logger.log(LOGINFO, "song name: [%s], song code : [%s], levelType: [%s]", songName, songCode, levelType);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -2560,6 +2575,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								logger.log(LOGINFO, "song name: [%s], song code : [%s] , levelType: [%s]", songName, songCode, levelType);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -2701,6 +2717,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -2842,6 +2859,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -3100,6 +3118,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -3241,6 +3260,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -3382,6 +3402,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
+								mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input

@@ -108,7 +108,7 @@ typedef struct {
 typedef struct
 {
 	char* ani;
-	char* encryptedAni;
+	char encryptedAni[31];
 }pnNumWithEncryptedAni;
 
 typedef struct
@@ -139,7 +139,7 @@ private:
 
 public:
 	WORD	nTotalCh;
-	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh;
+	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh, CGMaxCHNum;
 	char circle[20], zone[20];
 	CH_INFO* ChInfo;
 	CLogger logger;
