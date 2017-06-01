@@ -78,7 +78,7 @@ public:
 		hz = CreateZip(zipName, 0);
 
 		ZipAdd(hz, fileNameW, fileNameW);
-		
+
 		CloseZip(hz);
 		remove(fileName);
 	}
@@ -105,22 +105,22 @@ public:
 		getTime(time_value);
 		va_start(args, format);
 		switch (logger) {
-		case 0:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Trace   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		//case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Debug   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Info    : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		//case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Warning : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 2:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Error   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 0:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Trace   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+		   //case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Debug   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Info    : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+		   //case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Warning : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 2:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Error   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
 		}
 		va_end(args);
-		if (ftell(fp) >= 10000000)
+		if (ftell(fp) >= 100000000)
 		{
 			fclose(fp);
 			zipCurrentFile(CurFilePath);
 			openLoggerFile();
 		}
 		fflush(fp);
-		free(time_value);
+		//free(time_value);
 	}
 
 	~CLogger()

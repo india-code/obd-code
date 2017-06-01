@@ -69,6 +69,9 @@ void CSpiceOBDDlg::DoDataExchange(CDataExchange* pDX)
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_LIST_TRK, m_TrkChList);
 	DDX_Radio(pDX, IDC_TRACE, m_SetMinLogLevel);
+	DDX_Control(pDX, IDC_DAILING_VALUE, dailingValCtrl);
+	DDX_Control(pDX, IDC_CONNECTED_VALUE, connctedValCtrl);
+	DDX_Control(pDX, IDC_CG_VALUE, cgValCtrl);
 }
 
 BEGIN_MESSAGE_MAP(CSpiceOBDDlg, CDialogEx)
@@ -145,7 +148,7 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 	//GetDBData();
 	//SetTimer(1000, 200, NULL);
 	IsTimerOn = false;
-	OnBnClickedDiallingStart();
+	//OnBnClickedDiallingStart();
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
@@ -153,6 +156,11 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 void CSpiceOBDDlg::InitilizeDBConnection()
 {
 	conn = mysql_init(NULL);
+	connBase = mysql_init(NULL);
+	connSelect = mysql_init(NULL);
+	connInsert = mysql_init(NULL);
+	connUpdate = mysql_init(NULL);
+	connPort = mysql_init(NULL);
 	//Data stored in DBSettings.INI file
 	char host[255];
 	char DBName[255];
@@ -177,6 +185,31 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	if (mysql_real_connect(conn, host, username, password, DBName, port, NULL, 0) == 0)
 	{
 		AfxMessageBox(L"Connection failed to Database");
+		PostQuitMessage(0);
+	}
+	if (mysql_real_connect(connBase, host, username, password, DBName, port, NULL, 0) == 0)
+	{
+		AfxMessageBox(L"Connection failed to Database for Dialer base");
+		PostQuitMessage(0);
+	}
+	if (mysql_real_connect(connSelect, host, username, password, DBName, port, NULL, 0) == 0)
+	{
+		AfxMessageBox(L"Connection failed to Database for Dialer base");
+		PostQuitMessage(0);
+	}
+	if (mysql_real_connect(connInsert, host, username, password, DBName, port, NULL, 0) == 0)
+	{
+		AfxMessageBox(L"Connection failed to Database for Dialer base");
+		PostQuitMessage(0);
+	}
+	if (mysql_real_connect(connUpdate, host, username, password, DBName, port, NULL, 0) == 0)
+	{
+		AfxMessageBox(L"Connection failed to Database for Dialer base");
+		PostQuitMessage(0);
+	}
+	if (mysql_real_connect(connPort, host, username, password, DBName, port, NULL, 0) == 0)
+	{
+		AfxMessageBox(L"Connection failed to Database for Dialer base");
 		PostQuitMessage(0);
 	}
 }
@@ -219,201 +252,197 @@ void CSpiceOBDDlg::SetChannelInitialStatus()
 BOOL CSpiceOBDDlg::GetDBData()
 {
 	/***  Read Records  ***/
-	//call to decrypt values read from DB
-	int query_state;
-	char queryStr[256];
-
-	StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type, circle, zone, campaign_name, first_consent_digit from tbl_campaign_master where campaign_status = 1 and base_status = 1 and prompts_status = 1");
-
-	//logger.log(LOGINFO, queryStr);
-
-	query_state = mysql_query(conn, queryStr);
-
-	if (query_state != 0)
+	try
 	{
-		CString err(mysql_error(conn));
-		AfxMessageBox(err);
-	}
-
-	res = mysql_store_result(conn);
-
-	CampaignData tempdata;
-	int campKey = 1, channelsOccupied = CGMaxCHNum - 1;//-1;
-
-	StrCpyA(circle, "");
-	StrCpyA(zone, "");
-
-	while ((row = mysql_fetch_row(res)) != NULL)
-	{
-		BOOL isNewCampaign = true;
-		for (size_t campaignKey = 1; campaignKey <= Campaigns.size(); campaignKey++)
-		{
-			if (StrCmpA(Campaigns.at(campaignKey).campaign_id, row[0]) == 0)
-			{
-				isNewCampaign = false;
-				//StrCpyA(Campaigns.at(campaignKey).CLI, row[1]);
-				std::string strBuf = row[1];
-				size_t offset;
-				Campaigns.at(campaignKey).cliList.clear();
-				while ((offset = strBuf.find("#")) != std::string::npos)
-				{
-					Campaigns.at(campaignKey).cliList.push_back(strBuf.substr(0, offset));
-					strBuf.erase(0, offset + 1);
-				}
-
-				if (Campaigns.at(campaignKey).cliList.empty())
-				{
-					Campaigns.at(campaignKey).cliList.push_back(strBuf);
-				}
-				Campaigns.at(campaignKey).channelsAllocated = atoi(row[2]);
-				StrCpyA(Campaigns.at(campaignKey).promptsDirectory, row[3]);
-				Campaigns.at(campaignKey).obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
-				//StrCpyA(tempdata.campaign_name, row[7]);
-				StrCpyA(Campaigns.at(campaignKey).first_consent_digit, row[8]);
-
-				Campaigns.at(campaignKey).minCh = channelsOccupied + 1;
-				channelsOccupied = Campaigns.at(campaignKey).minCh + Campaigns.at(campaignKey).channelsAllocated - 1;
-				Campaigns.at(campaignKey).maxCh = channelsOccupied;
-			}
-		}
-		if (isNewCampaign)
-		{
-			StrCpyA(tempdata.campaign_id, row[0]);
-			//StrCpyA(tempdata.CLI, row[1]);
-			std::string strBuf = row[1];
-			size_t offset;
-			while ((offset = strBuf.find("#")) != std::string::npos)
-			{
-				tempdata.cliList.push_back(strBuf.substr(0, offset));
-				strBuf.erase(0, offset + 1);
-			}
-
-			if (tempdata.cliList.empty())
-			{
-				tempdata.cliList.push_back(strBuf);
-			}
-			tempdata.channelsAllocated = atoi(row[2]);
-			StrCpyA(tempdata.promptsDirectory, row[3]);
-			tempdata.obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
-			StrCpyA(tempdata.campaign_name, row[7]);
-			StrCpyA(tempdata.first_consent_digit, row[8]);
-
-			tempdata.minCh = channelsOccupied + 1;
-			channelsOccupied = tempdata.minCh + tempdata.channelsAllocated - 1;
-			tempdata.maxCh = channelsOccupied;
-
-			Campaigns.insert(pair<int, CampaignData>(campKey, tempdata));
-		}
-		if ((Campaigns.at(campKey).phnumBuf.size() <= (2 * Campaigns.at(campKey).channelsAllocated)))
-		{
-			//Get out dialer numbers 5 times to the allocated channel numbers to the campaign
-			sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
-				row[0], 0, (5 * Campaigns.at(campKey).channelsAllocated));
-
-			//logger.log(LOGINFO, queryStr);
-
-			query_state = mysql_query(conn, queryStr);
-
-			if (query_state != 0)
-			{
-				CString err(mysql_error(conn));
-				AfxMessageBox(err);
-			}
-			while (!Campaigns.at(campKey).phnumBuf.empty())
-			{
-				delete Campaigns.at(campKey).phnumBuf.front().ani;
-				Campaigns.at(campKey).phnumBuf.erase(Campaigns.at(campKey).phnumBuf.begin());
-			}
-			MYSQL_RES * resPhBuf = mysql_store_result(conn);
-			MYSQL_ROW rowPhBuf;
-			Campaigns.at(campKey).phnumBuf.clear();
-			while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
-			{
-				size_t curIndex = Campaigns.at(campKey).phnumBuf.size();
-				char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
-				Campaigns.at(campKey).phnumBuf.push_back({ DecryptedVal, "" });
-				StrCpyA(Campaigns.at(campKey).phnumBuf.at(curIndex).encryptedAni, rowPhBuf[0]);
-			}
-			mysql_free_result(resPhBuf);
-		}
-		//copying circle and zone to the global variables
-		if (!StrCmpA(circle, "") && !StrCmpA(zone, ""))
-		{
-			StrCpyA(circle, row[5]);
-			StrCpyA(zone, row[6]);
-		}
-		/*for (size_t i = 1; i <= Campaigns.size(); i++)
-		{*/
-		char tempPath[100];
-		char fileName[16];
-		int j = 1;
-		StrCpyA(tempPath, "");
-		//Campaigns.at(i).isCampaignCompleted = false;
-		while (true)
-		{
-			StrCpyA(tempPath, Campaigns.at(campKey).promptsDirectory);
-			sprintf_s(fileName, "%d.wav", j);
-			StrCatA(tempPath, fileName);
-			//logger.log(LOGINFO, "tempPath: %s", tempPath);
-			if (PathFileExistsA(tempPath))
-			{
-				/*index = i * 10 + j;
-				sprintf_s(alias, "alias%d", index);
-				if (SsmLoadIndexData(index, alias, 7, tempPath, 0, -1) != 0)
-				{
-				CString errMsg;
-				errMsg.Format(L"Load Index %d Error", index);
-				AfxMessageBox(errMsg);
-				PostQuitMessage(0);
-				}*/
-				StrCpyA(Campaigns.at(campKey).promptsPath[j], tempPath);
-				//logger.log(LOGINFO, "Path: %s, index: %s, total Index: %d", tempPath, Campaigns.at(i).promptsPath[j], SsmGetTotalIndexSeg());
-				j++;
-			}
-			else
-			{
-				break;
-			}
-		}//End While
-		 //update campaign status while its in execution
-		/*int query_state;
+		//call to decrypt values read from DB
+		int query_state;
 		char queryStr[256];
-		sprintf_s(queryStr, "update tbl_campaign_master set execution_status=1,campaign_status=2 where campaign_id='%s' and execution_status=0", Campaigns.at(i).campaign_id);
+
+		StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type, circle, zone, campaign_name, first_consent_digit from tbl_campaign_master where campaign_status = 1 and base_status = 1 and prompts_status = 1 order by camp_seqId");
+
+		//logger.log(LOGINFO, queryStr);
+
 		query_state = mysql_query(conn, queryStr);
+
 		if (query_state != 0)
 		{
 			CString err(mysql_error(conn));
 			AfxMessageBox(err);
-		}*/
+		}
 
-		//}//End For
-		campKey++;
+		res = mysql_store_result(conn);
+
+		CampaignData tempdata;
+		int campKey = 1, channelsOccupied = CGMaxCHNum - 1;//-1;
+
+		StrCpyA(circle, "");
+		StrCpyA(zone, "");
+
+		while ((row = mysql_fetch_row(res)) != NULL)
+		{
+			BOOL isNewCampaign = true;
+			for (size_t campaignKey = 1; campaignKey <= Campaigns.size(); campaignKey++)
+			{
+				if (StrCmpA(Campaigns.at(campaignKey).campaign_id, row[0]) == 0)
+				{
+					isNewCampaign = false;
+					//StrCpyA(Campaigns.at(campaignKey).CLI, row[1]);
+					std::string strBuf = row[1];
+					size_t offset;
+					Campaigns.at(campaignKey).cliList.clear();
+					//vector<std::string>().swap(Campaigns.at(campaignKey).cliList);
+					while ((offset = strBuf.find("#")) != std::string::npos)
+					{
+						Campaigns.at(campaignKey).cliList.push_back(strBuf.substr(0, offset));
+						strBuf.erase(0, offset + 1);
+					}
+
+					if (Campaigns.at(campaignKey).cliList.empty())
+					{
+						Campaigns.at(campaignKey).cliList.push_back(strBuf);
+					}
+					Campaigns.at(campaignKey).channelsAllocated = atoi(row[2]);
+					StrCpyA(Campaigns.at(campaignKey).promptsDirectory, row[3]);
+					Campaigns.at(campaignKey).obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
+					//StrCpyA(tempdata.campaign_name, row[7]);
+					StrCpyA(Campaigns.at(campaignKey).first_consent_digit, row[8]);
+
+					Campaigns.at(campaignKey).minCh = channelsOccupied + 1;
+					channelsOccupied = Campaigns.at(campaignKey).minCh + Campaigns.at(campaignKey).channelsAllocated - 1;
+					Campaigns.at(campaignKey).maxCh = channelsOccupied;
+				}
+			}
+			if (isNewCampaign)
+			{
+				StrCpyA(tempdata.campaign_id, row[0]);
+				//StrCpyA(tempdata.CLI, row[1]);
+				std::string strBuf = row[1];
+				size_t offset;
+				while ((offset = strBuf.find("#")) != std::string::npos)
+				{
+					tempdata.cliList.push_back(strBuf.substr(0, offset));
+					strBuf.erase(0, offset + 1);
+				}
+
+				if (tempdata.cliList.empty())
+				{
+					tempdata.cliList.push_back(strBuf);
+				}
+				tempdata.channelsAllocated = atoi(row[2]);
+				StrCpyA(tempdata.promptsDirectory, row[3]);
+				tempdata.obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
+				StrCpyA(tempdata.campaign_name, row[7]);
+				StrCpyA(tempdata.first_consent_digit, row[8]);
+
+				tempdata.minCh = channelsOccupied + 1;
+				channelsOccupied = tempdata.minCh + tempdata.channelsAllocated - 1;
+				tempdata.maxCh = channelsOccupied;
+
+				Campaigns.insert(pair<int, CampaignData>(campKey, tempdata));
+			}
+			if ((Campaigns.at(campKey).phnumBuf.size() <= (1 * Campaigns.at(campKey).channelsAllocated)))
+			{
+				//Get out dialer numbers 5 times to the allocated channel numbers to the campaign
+				sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
+					row[0], 0, (2 * Campaigns.at(campKey).channelsAllocated));
+
+				//logger.log(LOGINFO, queryStr);
+
+				query_state = mysql_query(connBase, queryStr);
+
+				if (query_state != 0)
+				{
+					CString err(mysql_error(connBase));
+					AfxMessageBox(err);
+				}
+				while (!Campaigns.at(campKey).phnumBuf.empty())
+				{
+					delete Campaigns.at(campKey).phnumBuf.front().ani;
+					Campaigns.at(campKey).phnumBuf.erase(Campaigns.at(campKey).phnumBuf.begin());
+				}
+				MYSQL_RES * resPhBuf = mysql_store_result(connBase);
+				MYSQL_ROW rowPhBuf;
+				
+				Campaigns.at(campKey).phnumBuf.clear();
+				//vector<pnNumWithEncryptedAni>().swap(Campaigns.at(campKey).phnumBuf);
+				while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
+				{
+					size_t curIndex = Campaigns.at(campKey).phnumBuf.size();
+					logger.log(LOGINFO, "Going for decryption of the string buffer:  %s size of campaigns is:%d", rowPhBuf[0], Campaigns.size());
+					char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
+					Campaigns.at(campKey).phnumBuf.push_back({ DecryptedVal, "" });
+					StrCpyA(Campaigns.at(campKey).phnumBuf.at(curIndex).encryptedAni, rowPhBuf[0]);
+				}
+				mysql_free_result(resPhBuf);
+			}
+			//copying circle and zone to the global variables
+			if (!StrCmpA(circle, "") && !StrCmpA(zone, ""))
+			{
+				StrCpyA(circle, row[5]);
+				StrCpyA(zone, row[6]);
+			}
+			/*for (size_t i = 1; i <= Campaigns.size(); i++)
+			{*/
+			char tempPath[100];
+			char fileName[16];
+			int j = 1;
+			StrCpyA(tempPath, "");
+			//Campaigns.at(i).isCampaignCompleted = false;
+			while (true)
+			{
+				StrCpyA(tempPath, Campaigns.at(campKey).promptsDirectory);
+				sprintf_s(fileName, "%d.wav", j);
+				StrCatA(tempPath, fileName);
+				//logger.log(LOGINFO, "tempPath: %s", tempPath);
+				if (PathFileExistsA(tempPath))
+				{
+					/*index = i * 10 + j;
+					sprintf_s(alias, "alias%d", index);
+					if (SsmLoadIndexData(index, alias, 7, tempPath, 0, -1) != 0)
+					{
+					CString errMsg;
+					errMsg.Format(L"Load Index %d Error", index);
+					AfxMessageBox(errMsg);
+					PostQuitMessage(0);
+					}*/
+					StrCpyA(Campaigns.at(campKey).promptsPath[j], tempPath);
+					//logger.log(LOGINFO, "Path: %s, index: %s, total Index: %d", tempPath, Campaigns.at(i).promptsPath[j], SsmGetTotalIndexSeg());
+					j++;
+				}
+				else
+				{
+					break;
+				}
+			}//End While
+			 //update campaign status while its in execution
+			/*int query_state;
+			char queryStr[256];
+			sprintf_s(queryStr, "update tbl_campaign_master set execution_status=1,campaign_status=2 where campaign_id='%s' and execution_status=0", Campaigns.at(i).campaign_id);
+			query_state = mysql_query(conn, queryStr);
+			if (query_state != 0)
+			{
+				CString err(mysql_error(conn));
+				AfxMessageBox(err);
+			}*/
+
+			//}//End For
+			campKey++;
+		}
+		mysql_free_result(res);
 	}
-	mysql_free_result(res);
-	//get total ports and cg ports and campaign wise distribution
-	sprintf_s(queryStr, "select total_ports, cgport from tbl_port_manager where zone = '%s' and circle = '%s'", zone, circle);
-	logger.log(LOGINFO, "Select ports query:  %s", queryStr);
-	query_state = mysql_query(conn, queryStr);
-
-	if (query_state != 0)
+	catch (CException* ex)
 	{
-		CString err(mysql_error(conn));
-		AfxMessageBox(err);
+		CRuntimeClass* curClass = ex->GetRuntimeClass();
+		CString Cstr(curClass->m_lpszClassName);
+		Cstr.Append(L" Exception found of type");
+		AfxMessageBox(Cstr);
+		PostQuitMessage(0);
 	}
-
-	MYSQL_RES * resPhBuf = mysql_store_result(conn);
-	MYSQL_ROW rowPhBuf;
-	while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
+	catch (...)
 	{
-		int totalch = atoi(rowPhBuf[0]);
-		int cgports = atoi(rowPhBuf[1]);
-		nTotalCh = totalch + cgports;
-		nIVRMinCh = 0;//totalch;
-		nIVRMaxCh = CGMaxCHNum - 1;//nTotalCh;
+		AfxMessageBox(L"Unhandled Exception occured in GetDBData()");
+		PostQuitMessage(0);
 	}
-	mysql_free_result(resPhBuf);
-	logger.log(LOGINFO, "total Ports: %d, minIvrCh: %d", nTotalCh, nIVRMinCh);
-
 	return true;
 }
 
@@ -526,70 +555,69 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	for (i = 0, nIndex = 0; i < nTotalCh; i++)
 	{
 		//if (SsmGetChType(i) != 2) continue;
-		switch (SsmGetChState(i))
-		{
-		case S_CALL_STANDBY:				state = "S_CALL_STANDBY"; break;
-		case S_CALL_PICKUPED:				state = "S_CALL_PICKUPED"; break;
-		case S_CALL_RINGING:				state = "S_CALL_RINGING"; break;
-		case S_CALL_TALKING:				state = "S_CALL_TALKING"; break;
-		case S_CALL_ANALOG_WAITDIALTONE:	state = "S_CALL_ANALOG_WAITDIALTONE";	break;
-		case S_CALL_ANALOG_TXPHONUM:		state = "S_CALL_ANALOG_TXPHONUM"; break;
-		case S_CALL_ANALOG_WAITDIALRESULT:	state = "S_CALL_ANALOG_WAITDIALRESULT";		break;
-		case S_CALL_PENDING:				state = "S_CALL_PENDING"; break;
-		case S_CALL_OFFLINE:				state = "S_CALL_OFFLINE"; break;
-		case S_CALL_WAIT_REMOTE_PICKUP:		state = "S_CALL_WAIT_REMOTE_PICKUP"; break;
-		case S_CALL_ANALOG_CLEAR:			state = "S_CALL_ANALOG_CLEAR"; break;
-		case S_CALL_UNAVAILABLE:			state = "S_CALL_UNAVAILABLE"; break;
-		case S_CALL_LOCKED:					state = "S_CALL_LOCKED"; break;
-		case S_CALL_RemoteBlock:			state = "S_CALL_RemoteBlock"; break;
-		case S_CALL_LocalBlock:				state = "S_CALL_LocalBlock"; break;
-		case S_CALL_Ss1InWaitPhoNum:		state = "S_CALL_Ss1InWaitPhoNum"; break;
-		case S_CALL_Ss1InWaitFwdStop:		state = "S_CALL_Ss1InWaitFwdStop"; break;
-		case S_CALL_Ss1InWaitCallerID:		state = "S_CALL_Ss1InWaitCallerID"; break;
-		case S_CALL_Ss1InWaitKD:			state = "S_CALL_Ss1InWaitKD"; break;
-		case S_CALL_Ss1InWaitKDStop:		state = "S_CALL_Ss1InWaitKDStop"; break;
-		case S_CALL_SS1_SAYIDLE:			state = "S_CALL_SS1_SAYIDLE"; break;
-		case S_CALL_SS1WaitIdleCAS:			state = "S_CALL_SS1WaitIdleCAS"; break;
-		case S_CALL_SS1PhoNumHoldup:		state = "S_CALL_SS1PhoNumHoldup"; break;
-		case S_CALL_Ss1InWaitStopSendA3p:	state = "S_CALL_Ss1InWaitPhoNum"; break;
-		case S_CALL_Ss1OutWaitBwdAck:		state = "S_CALL_Ss1OutWaitBwdAck"; break;
-		case S_CALL_Ss1OutTxPhoNum:			state = "S_CALL_Ss1OutTxPhoNum"; break;
-		case S_CALL_Ss1OutWaitAppendPhoNum:	state = "S_CALL_Ss1OutWaitAppendPhoNum"; break;
-		case S_CALL_Ss1OutTxCallerID:		state = "S_CALL_Ss1OutTxCallerID"; break;
-		case S_CALL_Ss1OutWaitKB:			state = "S_CALL_Ss1OutWaitKB"; break;
-		case S_CALL_Ss1OutDetectA3p:		state = "S_CALL_Ss1OutDetectA3p"; break;
-		case S_ISDN_OUT_WAIT_NET_RESPONSE:	state = "S_ISDN_OUT_WAIT_NET_RESPONSE"; break;
-		case S_ISDN_OUT_PLS_APPEND_NO:		state = "S_ISDN_OUT_PLS_APPEND_NO"; break;
-		case S_ISDN_IN_CHK_CALL_IN:			state = "S_ISDN_IN_CHK_CALL_IN"; break;
-		case S_ISDN_IN_RCVING_NO:			state = "S_ISDN_IN_RCVING_NO"; break;
-		case S_ISDN_IN_WAIT_TALK:			state = "S_ISDN_IN_WAIT_TALK"; break;
-		case S_ISDN_OUT_WAIT_ALERT:			state = "S_ISDN_OUT_WAIT_ALERT"; break;
-		case S_ISDN_CALL_BEGIN:				state = "S_ISDN_CALL_BEGIN"; break;
-		case S_ISDN_WAIT_HUANGUP:			state = "S_ISDN_WAIT_HUANGUP"; break;
-		case S_ISDN_IN_CALL_PROCEEDING:		state = "S_ISDN_IN_CALL_PROCEEDING"; break;
-		case S_CALL_SENDRING:				state = "S_CALL_SENDRING "; break;
-		case S_ISUP_WaitSAM:				state = "S_ISUP_WaitSAM"; break;
-		case S_ISUP_WaitRLC:				state = "S_ISUP_WaitRLC"; break;
-		case S_ISUP_WaitReset:				state = "S_ISUP_WaitReset"; break;
-		case S_ISUP_LocallyBlocked:			state = "S_ISUP_LocallyBlocked"; break;
-		case S_ISUP_RemotelyBlocked:        state = "S_ISUP_RemotelyBlocked"; break;
-		case S_ISUP_WaitDialAnswer:			state = "S_ISUP_WaitDialAnswer"; break;
-		case S_ISUP_WaitINF:				state = "S_ISUP_WaitINF"; break;
-		case S_ISUP_WaitSetCallerID:		state = "S_ISUP_WaitSetCallerID"; break;
-		case S_DTRC_ACTIVE:					state = "S_DTRC_ACTIVE"; break;
-		case S_ISUP_Suspend:				state = "S_ISUP_Suspend"; break;
-		case S_CALL_DISCONECT:				state = "S_CALL_DISCONECT"; break;
-		case S_CALL_SS1WaitFlashEnd:		state = "S_CALL_SS1WaitFlashEnd"; break;
-		case S_CALL_FlashEnd:				state = "S_CALL_FlashEnd"; break;
-		case S_CALL_SIGNAL_ERROR:			state = "S_CALL_SIGNAL_ERROR"; break;
-		case S_CALL_FRAME_ERROR:			state = "S_CALL_FRAME_ERROR"; break;
-		case S_IP_MEDIA_LOCK:				state = "S_IP_MEDIA_LOCK"; break;
-		case S_IP_MEDIA_OPEN:				state = "S_IP_MEDIA_OPEN"; break;
-		case S_SPY_RBSWAITACK:				state = "S_SPY_RBSWAITACK"; break;
-		case S_SPY_RBSSENDACK:				state = "S_SPY_RBSSENDACK"; break;
-		case S_IPR_USING:					state = "S_IPR_USING"; break;
-		case S_IPR_COMMUNICATING:			state = "S_IPR_COMMUNICATING"; break;
-		case S_ISUP_WaitCOT:				state = "S_ISUP_WaitCOT"; break;
+		switch (SsmGetChState(i)){
+			case S_CALL_STANDBY:				state = "S_CALL_STANDBY"; break;
+			case S_CALL_PICKUPED:				state = "S_CALL_PICKUPED"; break;
+			case S_CALL_RINGING:				state = "S_CALL_RINGING"; break;
+			case S_CALL_TALKING:				state = "S_CALL_TALKING"; break;
+			case S_CALL_ANALOG_WAITDIALTONE:	state = "S_CALL_ANALOG_WAITDIALTONE";	break;
+			case S_CALL_ANALOG_TXPHONUM:		state = "S_CALL_ANALOG_TXPHONUM"; break;
+			case S_CALL_ANALOG_WAITDIALRESULT:	state = "S_CALL_ANALOG_WAITDIALRESULT";		break;
+			case S_CALL_PENDING:				state = "S_CALL_PENDING"; break;
+			case S_CALL_OFFLINE:				state = "S_CALL_OFFLINE"; break;
+			case S_CALL_WAIT_REMOTE_PICKUP:		state = "S_CALL_WAIT_REMOTE_PICKUP"; break;
+			case S_CALL_ANALOG_CLEAR:			state = "S_CALL_ANALOG_CLEAR"; break;
+			case S_CALL_UNAVAILABLE:			state = "S_CALL_UNAVAILABLE"; break;
+			case S_CALL_LOCKED:					state = "S_CALL_LOCKED"; break;
+			case S_CALL_RemoteBlock:			state = "S_CALL_RemoteBlock"; break;
+			case S_CALL_LocalBlock:				state = "S_CALL_LocalBlock"; break;
+			case S_CALL_Ss1InWaitPhoNum:		state = "S_CALL_Ss1InWaitPhoNum"; break;
+			case S_CALL_Ss1InWaitFwdStop:		state = "S_CALL_Ss1InWaitFwdStop"; break;
+			case S_CALL_Ss1InWaitCallerID:		state = "S_CALL_Ss1InWaitCallerID"; break;
+			case S_CALL_Ss1InWaitKD:			state = "S_CALL_Ss1InWaitKD"; break;
+			case S_CALL_Ss1InWaitKDStop:		state = "S_CALL_Ss1InWaitKDStop"; break;
+			case S_CALL_SS1_SAYIDLE:			state = "S_CALL_SS1_SAYIDLE"; break;
+			case S_CALL_SS1WaitIdleCAS:			state = "S_CALL_SS1WaitIdleCAS"; break;
+			case S_CALL_SS1PhoNumHoldup:		state = "S_CALL_SS1PhoNumHoldup"; break;
+			case S_CALL_Ss1InWaitStopSendA3p:	state = "S_CALL_Ss1InWaitPhoNum"; break;
+			case S_CALL_Ss1OutWaitBwdAck:		state = "S_CALL_Ss1OutWaitBwdAck"; break;
+			case S_CALL_Ss1OutTxPhoNum:			state = "S_CALL_Ss1OutTxPhoNum"; break;
+			case S_CALL_Ss1OutWaitAppendPhoNum:	state = "S_CALL_Ss1OutWaitAppendPhoNum"; break;
+			case S_CALL_Ss1OutTxCallerID:		state = "S_CALL_Ss1OutTxCallerID"; break;
+			case S_CALL_Ss1OutWaitKB:			state = "S_CALL_Ss1OutWaitKB"; break;
+			case S_CALL_Ss1OutDetectA3p:		state = "S_CALL_Ss1OutDetectA3p"; break;
+			case S_ISDN_OUT_WAIT_NET_RESPONSE:	state = "S_ISDN_OUT_WAIT_NET_RESPONSE"; break;
+			case S_ISDN_OUT_PLS_APPEND_NO:		state = "S_ISDN_OUT_PLS_APPEND_NO"; break;
+			case S_ISDN_IN_CHK_CALL_IN:			state = "S_ISDN_IN_CHK_CALL_IN"; break;
+			case S_ISDN_IN_RCVING_NO:			state = "S_ISDN_IN_RCVING_NO"; break;
+			case S_ISDN_IN_WAIT_TALK:			state = "S_ISDN_IN_WAIT_TALK"; break;
+			case S_ISDN_OUT_WAIT_ALERT:			state = "S_ISDN_OUT_WAIT_ALERT"; break;
+			case S_ISDN_CALL_BEGIN:				state = "S_ISDN_CALL_BEGIN"; break;
+			case S_ISDN_WAIT_HUANGUP:			state = "S_ISDN_WAIT_HUANGUP"; break;
+			case S_ISDN_IN_CALL_PROCEEDING:		state = "S_ISDN_IN_CALL_PROCEEDING"; break;
+			case S_CALL_SENDRING:				state = "S_CALL_SENDRING "; break;
+			case S_ISUP_WaitSAM:				state = "S_ISUP_WaitSAM"; break;
+			case S_ISUP_WaitRLC:				state = "S_ISUP_WaitRLC"; break;
+			case S_ISUP_WaitReset:				state = "S_ISUP_WaitReset"; break;
+			case S_ISUP_LocallyBlocked:			state = "S_ISUP_LocallyBlocked"; break;
+			case S_ISUP_RemotelyBlocked:        state = "S_ISUP_RemotelyBlocked"; break;
+			case S_ISUP_WaitDialAnswer:			state = "S_ISUP_WaitDialAnswer"; break;
+			case S_ISUP_WaitINF:				state = "S_ISUP_WaitINF"; break;
+			case S_ISUP_WaitSetCallerID:		state = "S_ISUP_WaitSetCallerID"; break;
+			case S_DTRC_ACTIVE:					state = "S_DTRC_ACTIVE"; break;
+			case S_ISUP_Suspend:				state = "S_ISUP_Suspend"; break;
+			case S_CALL_DISCONECT:				state = "S_CALL_DISCONECT"; break;
+			case S_CALL_SS1WaitFlashEnd:		state = "S_CALL_SS1WaitFlashEnd"; break;
+			case S_CALL_FlashEnd:				state = "S_CALL_FlashEnd"; break;
+			case S_CALL_SIGNAL_ERROR:			state = "S_CALL_SIGNAL_ERROR"; break;
+			case S_CALL_FRAME_ERROR:			state = "S_CALL_FRAME_ERROR"; break;
+			case S_IP_MEDIA_LOCK:				state = "S_IP_MEDIA_LOCK"; break;
+			case S_IP_MEDIA_OPEN:				state = "S_IP_MEDIA_OPEN"; break;
+			case S_SPY_RBSWAITACK:				state = "S_SPY_RBSWAITACK"; break;
+			case S_SPY_RBSSENDACK:				state = "S_SPY_RBSSENDACK"; break;
+			case S_IPR_USING:					state = "S_IPR_USING"; break;
+			case S_IPR_COMMUNICATING:			state = "S_IPR_COMMUNICATING"; break;
+			case S_ISUP_WaitCOT:				state = "S_ISUP_WaitCOT"; break;
 		}
 
 		m_TrkChList.GetItemText(nIndex, 6, tmpstr, 50);
@@ -784,10 +812,10 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 				ChInfo[i].CDRStatus.total_duration, ChInfo[i].CDRStatus.reason, ChInfo[i].CDRStatus.encrypted_ani, ChInfo[i].CDRStatus.ani, timeVal, ChInfo[i].CDRStatus.songName, ChInfo[i].CDRStatus.DNISBuf);
 
 			logger.log(LOGINFO, queryStrInsert);
-			query_state = mysql_query(conn, queryStrInsert);
+			query_state = mysql_query(connInsert, queryStrInsert);
 			if (query_state != 0)
 			{
-				CString err(mysql_error(conn));
+				CString err(mysql_error(connInsert));
 				AfxMessageBox(err);
 			}
 			//logging correct consent recieved
@@ -824,17 +852,34 @@ BOOL CSpiceOBDDlg::UpdatePhNumbersStatus(int ch)
 
 	sprintf_s(queryStr, "update tbl_outdialer_base set status = 1 where campaign_id = '%s' and ani = '%s'",
 		Campaigns.at(ChInfo[ch].CampaignID).campaign_id, ChInfo[ch].CDRStatus.encrypted_ani);
-	//logger.log(LOGINFO, "update query for phone number: %s, Encrypted Ani: %s, Channel Num:%d", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.encrypted_ani, ch);
-	int query_state = mysql_query(conn, queryStr);
+	logger.log(LOGINFO, "update query for phone number: %s, Encrypted Ani: %s, Channel Num:%d", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.encrypted_ani, ch);
+	int query_state = mysql_query(connUpdate, queryStr);
 
 	if (query_state != 0)
 	{
-		CString err(mysql_error(conn));
+		CString err(mysql_error(connUpdate));
 		AfxMessageBox(err);
 	}
-	if (mysql_affected_rows(conn) >= 1)
+	if (mysql_affected_rows(connUpdate) >= 1)
 	{
 		return true;
+	}
+	else
+	{
+		sprintf_s(queryStr, "update tbl_outdialer_base set status = 1 where ani = '%s'",
+			 ChInfo[ch].CDRStatus.encrypted_ani);
+		//logger.log(LOGINFO, "update query for phone number: %s, Encrypted Ani: %s, Channel Num:%d", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.encrypted_ani, ch);
+		int query_state = mysql_query(connUpdate, queryStr);
+
+		if (query_state != 0)
+		{
+			CString err(mysql_error(connUpdate));
+			AfxMessageBox(err);
+		}
+		if (mysql_affected_rows(connUpdate) >= 1)
+		{
+			return true;
+		}
 	}
 	logger.log(LOGERR, "UpdatePhNumbersStatus Number update failed: %s, query string: %s, channel Num: %d", ChInfo[ch].pPhoNumBuf, queryStr, ch);
 	return false;
@@ -846,18 +891,35 @@ BOOL CSpiceOBDDlg::UpdateReasonInDialerBase(int ch)
 	char queryStr[256];
 
 	sprintf_s(queryStr, "update tbl_outdialer_base set reason = '%s' where campaign_id = '%s' and ani = '%s'",
-		ChInfo[ch].CDRStatus.reason,Campaigns.at(ChInfo[ch].CampaignID).campaign_id, ChInfo[ch].CDRStatus.encrypted_ani);
-	//logger.log(LOGINFO, "update query for phone number: %s, Encrypted Ani: %s, Channel Num:%d", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.encrypted_ani, ch);
-	int query_state = mysql_query(conn, queryStr);
+		ChInfo[ch].CDRStatus.reason, Campaigns.at(ChInfo[ch].CampaignID).campaign_id, ChInfo[ch].CDRStatus.encrypted_ani);
+	logger.log(LOGINFO, "update query for phone number: %s, Encrypted Ani: %s, Channel Num:%d", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.encrypted_ani, ch);
+	int query_state = mysql_query(connUpdate, queryStr);
 
 	if (query_state != 0)
 	{
-		CString err(mysql_error(conn));
+		CString err(mysql_error(connUpdate));
 		AfxMessageBox(err);
 	}
-	if (mysql_affected_rows(conn) >= 1)
+	if (mysql_affected_rows(connUpdate) >= 1)
 	{
 		return true;
+	}
+	else
+	{
+		sprintf_s(queryStr, "update tbl_outdialer_base set reason = '%s' where ani = '%s'",
+			ChInfo[ch].CDRStatus.reason, ChInfo[ch].CDRStatus.encrypted_ani);
+		//logger.log(LOGINFO, "update query for phone number: %s, Encrypted Ani: %s, Channel Num:%d", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.encrypted_ani, ch);
+		int query_state = mysql_query(connUpdate, queryStr);
+
+		if (query_state != 0)
+		{
+			CString err(mysql_error(connUpdate));
+			AfxMessageBox(err);
+		}
+		if (mysql_affected_rows(connUpdate) >= 1)
+		{
+			return true;
+		}
 	}
 	logger.log(LOGERR, "UpdateReasonInDialerBase Number update failed: %s, query string: %s, channel Num: %d", ChInfo[ch].pPhoNumBuf, queryStr, ch);
 	return false;
@@ -879,9 +941,14 @@ BOOL CSpiceOBDDlg::isCampaignChannelsCleared(int campaignKey)
 
 void CSpiceOBDDlg::CloseDBConn()
 {
-	mysql_free_result(res);
+	//mysql_free_result(res);
 
 	// Close a MySQL connection
+	mysql_close(connBase);
+	mysql_close(connPort);
+	mysql_close(connSelect);
+	mysql_close(connInsert);
+	mysql_close(connUpdate);
 	mysql_close(conn);
 }
 
@@ -1040,14 +1107,20 @@ void CSpiceOBDDlg::LogErrorCodeAndMessage(int ch)
 
 void CSpiceOBDDlg::HangupCall(int ch)
 {
+	//Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
+	logger.log(LOGINFO, "Hangup Called for channel: %d, outbound IVRChannelNumber: %d", ch, ChInfo[ch].IVRChannelNumber);
 	if (ChInfo[ch].IVRChannelNumber != -1)
 	{
-		SsmStopTalkWith(ch, ChInfo[ch].IVRChannelNumber);
-		ChInfo[ch].IVRChannelNumber = -1;
-		SsmHangup(ChInfo[ch].IVRChannelNumber);
+		char errReason[100]; 
+		int code = SsmStopTalkWith(ChInfo[ch].IVRChannelNumber, ch); SsmGetLastErrMsg(errReason);
+		logger.log(LOGINFO, "Return code for SsmStopTalkWith(%d,%d) = %d reason = %s",ch, ChInfo[ch].IVRChannelNumber, code, errReason); //Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
+		code = -1;
+		code = SsmHangup(ChInfo[ch].IVRChannelNumber); SsmGetLastErrMsg(errReason);
+		logger.log(LOGINFO, "Return code for SsmHangup(%d) = %d reason = %s",ChInfo[ch].IVRChannelNumber,code, errReason); //Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
 		ChInfo[ChInfo[ch].IVRChannelNumber].InUse = false;
 		m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 3, L"");
 		m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 4, L"");
+		ChInfo[ch].IVRChannelNumber = -1;
 	}
 	SsmClearRxDtmfBuf(ch);
 	SsmStopPlay(ch);
@@ -1062,8 +1135,21 @@ void CSpiceOBDDlg::HangupCall(int ch)
 
 void CSpiceOBDDlg::HangupIVRCall(int ch)
 {
-	SsmHangup(ch);
-	ChInfo[ch].InUse = false;
+	if(ch >= 0){
+		char errReason[100];
+		int code = SsmHangup(ch); SsmGetLastErrMsg(errReason);
+		//Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
+		logger.log(LOGINFO, "Return code for SsmHangup(%d) = %d reason = %s", ch, code, errReason); 
+		//Added by sandeep rajan - 24th May, 2017 to clear the CG ANI and BNI columns after call completes on CG channels.
+		try{
+			m_TrkChList.SetItemText(ch, 3, L"");
+			m_TrkChList.SetItemText(ch, 4, L"");
+		}
+		catch (...) {
+			logger.log(LOGERR, "Error in clearing the columns of the outgoing channel %d", ch);
+		}
+		ChInfo[ch].InUse = false;
+	} else logger.log(LOGERR, "Got invalid channel %d for HangupIVRCall", ch);
 }
 
 char* CSpiceOBDDlg::GetReleaseErrorReason(WORD errorCode)
@@ -1143,6 +1229,28 @@ char* CSpiceOBDDlg::GetReleaseErrorReason(WORD errorCode)
 	}
 }
 
+
+
+void CSpiceOBDDlg::SetCallsDaillingCount(int callsDialling)
+{
+	CString DailStr;
+	DailStr.Format(_T("%d"), callsDialling);
+	dailingValCtrl.SetWindowTextW(DailStr);
+	DailStr.Empty();
+}
+void CSpiceOBDDlg::SetCallsConnectedCount(int callsConnected)
+{
+	CString ConnStr;
+	ConnStr.Format(_T("%d"), callsConnected);
+	connctedValCtrl.SetWindowTextW(ConnStr);
+}
+void CSpiceOBDDlg::SetCallsPatchedUpCount(int callsPatchedUp)
+{
+	CString CgStr;
+	CgStr.Format(_T("%d"), callsPatchedUp);
+	cgValCtrl.SetWindowTextW(CgStr);
+}
+
 void CSpiceOBDDlg::DoUserWork()
 {
 	int nResult, nDirection;
@@ -1160,7 +1268,13 @@ void CSpiceOBDDlg::DoUserWork()
 		if (nResult == -1 || nDirection < 1) continue;
 		tempCampId = ChInfo[i].CampaignID;
 		if (tempCampId == -1) continue;
-		if (ChInfo[i].isIVRChannel) continue;
+		if (ChInfo[i].isIVRChannel)
+		{
+			if (SsmGetChState(i) == S_CALL_PENDING) {
+				HangupIVRCall(i);
+			}
+			continue;
+		}
 
 		switch (ChInfo[i].nStep)
 		{
@@ -1227,6 +1341,8 @@ void CSpiceOBDDlg::DoUserWork()
 					ChInfo[i].nStep = USER_WAIT_REMOTE_PICKUP;
 					ChInfo[i].CDRStatus.call_time = time(0);
 					ChInfo[i].CDRStatus.answer_time = 0;
+					callsDialling++;
+					//SetCallsDaillingCount(callsDialling);
 					//logger.log(LOGINFO, "Number Dialed on channel: %d ", i);
 				}
 				else
@@ -1294,6 +1410,8 @@ void CSpiceOBDDlg::DoUserWork()
 						}
 					}
 				}
+				callsDialling--;
+				//SetCallsDaillingCount(callsDialling);
 				break;
 			case DIAL_FAILURE:
 			case DIAL_NO_DIALTONE:
@@ -1308,6 +1426,8 @@ void CSpiceOBDDlg::DoUserWork()
 				sprintf_s(ChInfo[i].CDRStatus.reason_code, "%hu", releaseCode);
 				StrCpyA(ChInfo[i].CDRStatus.reason, GetReleaseErrorReason(releaseCode));
 				HangupCall(i);
+				callsDialling--;
+				//SetCallsDaillingCount(callsDialling);
 				break;
 			case DIAL_STANDBY:
 				nResult = SsmGetChStateKeepTime(i);
@@ -1322,8 +1442,9 @@ void CSpiceOBDDlg::DoUserWork()
 					//LogErrorCodeAndMessage(i);
 					//logger.log(LOGERR, "Channel State: %d at channel Number: %d", DIAL_STANDBY, i);
 					HangupCall(i);
+					callsDialling--;
+					//SetCallsDaillingCount(callsDialling);
 				}
-
 				break;
 
 			case DIAL_DIALING:
@@ -1341,6 +1462,8 @@ void CSpiceOBDDlg::DoUserWork()
 				StrCpyA(ChInfo[i].CDRStatus.status, "FAIL");
 				StrCpyA(ChInfo[i].CDRStatus.reason, GetReleaseErrorReason(releaseCode));
 				HangupCall(i);
+				callsDialling--;
+				//SetCallsDaillingCount(callsDialling);
 			}
 			break;
 		case USER_TALKING:
@@ -1539,36 +1662,37 @@ void CSpiceOBDDlg::DoUserWork()
 								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, jump_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
 									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
-								queryState = mysql_query(conn, songQuery);
+								queryState = mysql_query(connSelect, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
 								if (queryState != 0)
 								{
-									CString err(mysql_error(conn));
+									CString err(mysql_error(connSelect));
 									AfxMessageBox(err);
 								}
 
-								res = mysql_store_result(conn);
+								MYSQL_RES *resPromo = mysql_store_result(connSelect);
+								MYSQL_ROW rowPromo;
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
 								StrCpyA(levelType, "");
 								StrCpyA(patchDNIS, "");
 								jumpLevel = -1;
-								if ((row = mysql_fetch_row(res)) != NULL)
+								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
-									StrCpyA(songName, row[0]);
-									StrCpyA(levelType, row[2]);
-									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
+									StrCpyA(songName, rowPromo[0]);
+									StrCpyA(levelType, rowPromo[2]);
+									if (strlen(rowPromo[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
-										sprintf_s(songCode, "%07s", row[1]);
+										sprintf_s(songCode, "%07s", rowPromo[1]);
 									}
 									else
 									{
-										StrCpyA(songCode, row[1]);
+										StrCpyA(songCode, rowPromo[1]);
 									}
-									StrCpyA(patchDNIS, row[3]);
-									jumpLevel = atoi(row[4]);
+									StrCpyA(patchDNIS, rowPromo[3]);
+									jumpLevel = atoi(rowPromo[4]);
 								}
-								mysql_free_result(res);
+								mysql_free_result(resPromo);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -1684,36 +1808,37 @@ void CSpiceOBDDlg::DoUserWork()
 								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, jump_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
 									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
-								queryState = mysql_query(conn, songQuery);
+								queryState = mysql_query(connSelect, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
 								if (queryState != 0)
 								{
-									CString err(mysql_error(conn));
+									CString err(mysql_error(connSelect));
 									AfxMessageBox(err);
 								}
 
-								res = mysql_store_result(conn);
+								MYSQL_RES *resPromo = mysql_store_result(connSelect);
+								MYSQL_ROW rowPromo;
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
 								StrCpyA(levelType, "");
 								StrCpyA(patchDNIS, "");
 								jumpLevel = -1;
-								if ((row = mysql_fetch_row(res)) != NULL)
+								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
-									StrCpyA(songName, row[0]);
-									StrCpyA(levelType, row[2]);
-									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
+									StrCpyA(songName, rowPromo[0]);
+									StrCpyA(levelType, rowPromo[2]);
+									if (strlen(rowPromo[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
-										sprintf_s(songCode, "%07s", row[1]);
+										sprintf_s(songCode, "%07s", rowPromo[1]);
 									}
 									else
 									{
-										StrCpyA(songCode, row[1]);
+										StrCpyA(songCode, rowPromo[1]);
 									}
-									StrCpyA(patchDNIS, row[3]);
-									jumpLevel = atoi(row[4]);
+									StrCpyA(patchDNIS, rowPromo[3]);
+									jumpLevel = atoi(rowPromo[4]);
 								}
-								mysql_free_result(res);
+								mysql_free_result(resPromo);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -1745,6 +1870,7 @@ void CSpiceOBDDlg::DoUserWork()
 										{
 											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
+											//logger.log(LOGINFO, "patchDNIS to CIVR: %s", patchDNIS);
 											//StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
 											StrCatA(patchDNIS, Campaigns.at(tempCampId).first_consent_digit);
 										}
@@ -1794,7 +1920,7 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 7;
-								ChInfo[i].levelNumber = 3;
+								ChInfo[i].levelNumber = 2;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
 								{
@@ -1829,36 +1955,37 @@ void CSpiceOBDDlg::DoUserWork()
 								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s'), jump_level as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 3",
 									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
-								queryState = mysql_query(conn, songQuery);
+								queryState = mysql_query(connSelect, songQuery);
 								logger.log(LOGINFO, "Song query: %s", songQuery);
 								if (queryState != 0)
 								{
-									CString err(mysql_error(conn));
+									CString err(mysql_error(connSelect));
 									AfxMessageBox(err);
 								}
 
-								res = mysql_store_result(conn);
+								MYSQL_RES *resPromo = mysql_store_result(connSelect);
+								MYSQL_ROW rowPromo;
 								StrCpyA(songName, "");
 								StrCpyA(songCode, "");
 								StrCpyA(levelType, "");
 								StrCpyA(patchDNIS, "");
 								jumpLevel = -1;
-								if ((row = mysql_fetch_row(res)) != NULL)
+								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
-									StrCpyA(songName, row[0]);
-									StrCpyA(levelType, row[2]);
-									if (strlen(row[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
+									StrCpyA(songName, rowPromo[0]);
+									StrCpyA(levelType, rowPromo[2]);
+									if (strlen(rowPromo[1]) < 7 && (StrCmpIA(levelType, "DT") == 0))
 									{
-										sprintf_s(songCode, "%07s", row[1]);
+										sprintf_s(songCode, "%07s", rowPromo[1]);
 									}
 									else
 									{
-										StrCpyA(songCode, row[1]);
+										StrCpyA(songCode, rowPromo[1]);
 									}
-									StrCpyA(patchDNIS, row[3]);
-									jumpLevel = atoi(row[4]);
+									StrCpyA(patchDNIS, rowPromo[3]);
+									jumpLevel = atoi(rowPromo[4]);
 								}
-								mysql_free_result(res);
+								mysql_free_result(resPromo);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -2187,7 +2314,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
-								mysql_free_result(res);
+								//mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								logger.log(LOGINFO, "song name:[%s], song code : [%s], levelType : [%s]", songName, songCode, levelType);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -2327,7 +2454,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
-								mysql_free_result(res);
+								//mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								logger.log(LOGINFO, "song name: [%s], song code : [%s], levelType: [%s]", songName, songCode, levelType);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -2575,7 +2702,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
-								mysql_free_result(res);
+								//mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								logger.log(LOGINFO, "song name: [%s], song code : [%s] , levelType: [%s]", songName, songCode, levelType);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -2717,7 +2844,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
-								mysql_free_result(res);
+								//mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -2859,7 +2986,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
-								mysql_free_result(res);
+								//mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -3118,7 +3245,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
-								mysql_free_result(res);
+								//mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -3260,7 +3387,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
-								mysql_free_result(res);
+								//mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -3402,7 +3529,7 @@ void CSpiceOBDDlg::DoUserWork()
 									
 									StrCpyA(patchDNIS, row[3]);
 								}
-								mysql_free_result(res);
+								//mysql_free_result(res);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
@@ -3931,6 +4058,9 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 {
 	try {
 		//ReadNumbersFromFiles();
+		callsDialling = 0; 
+		callsConnected = 0;
+		callsPatchedUp = 0;
 		if (GetDBData() == TRUE)
 		{
 			//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
@@ -3939,6 +4069,34 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			IsDailingTimeInRange = true;
 			openCDRLogFile();
 			openConsentLogFile();
+
+			//get total ports and cg ports and campaign wise distribution
+			char queryStr[256];
+			sprintf_s(queryStr, "select total_ports, cgport from tbl_port_manager where zone = '%s' and circle = '%s'", zone, circle);
+			logger.log(LOGINFO, "Select ports query:  %s", queryStr);
+			int query_state = mysql_query(connPort, queryStr);
+
+			if (query_state != 0)
+			{
+				CString err(mysql_error(connPort));
+				AfxMessageBox(err);
+			}
+
+			MYSQL_RES * resPort = mysql_store_result(connPort);
+			MYSQL_ROW rowPort;
+			while ((rowPort = mysql_fetch_row(resPort)) != NULL)
+			{
+				int totalch = atoi(rowPort[0]);
+				int cgports = atoi(rowPort[1]);
+				nTotalCh = totalch + cgports;
+				nIVRMinCh = 0;//totalch;
+				nIVRMaxCh = CGMaxCHNum - 1;//nTotalCh;
+			}
+			mysql_free_result(resPort);
+			logger.log(LOGINFO, "total Ports: %d, minIvrCh: %d", nTotalCh, nIVRMinCh);
+
+
+
 			//Initialization of channels on trunk-board
 			ChInfo = new CH_INFO[nTotalCh];
 

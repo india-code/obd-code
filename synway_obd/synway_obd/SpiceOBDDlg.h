@@ -12,6 +12,7 @@
 #include <map>
 #include <vector>
 #include <Shlwapi.h>
+#include "afxwin.h"
 
 using namespace std;
 
@@ -131,12 +132,12 @@ typedef struct
 class CSpiceOBDDlg : public CDialogEx
 {
 private:
-	MYSQL* conn;
+	MYSQL* conn, *connBase, *connSelect, *connInsert, *connUpdate, *connPort;
 	MYSQL_RES *res;
 	MYSQL_ROW row;
 	//int i;
 	void SetDiallingStartStopBtn(BOOL enableStart);
-
+	int callsDialling, callsConnected, callsPatchedUp;
 public:
 	WORD	nTotalCh;
 	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh, CGMaxCHNum;
@@ -155,6 +156,9 @@ public:
 	ofstream ConsentFile;
 	map<int, CampaignData> Campaigns;
 
+	void SetCallsDaillingCount(int callsDialling);
+	void SetCallsConnectedCount(int callsConnected);
+	void SetCallsPatchedUpCount(int callsPatchedUp);
 	BOOL UpdatePhNumbersStatus(int ch);
 	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();
@@ -207,4 +211,7 @@ public:
 	int m_SetMinLogLevel;
 	afx_msg void OnBnClickedDiallingStart();
 	afx_msg void OnBnClickedDiallingStop();
+	CStatic dailingValCtrl;
+	CStatic connctedValCtrl;
+	CStatic cgValCtrl;
 };
