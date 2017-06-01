@@ -1306,7 +1306,7 @@ void CSpiceOBDDlg::DoUserWork()
 						m_TrkChList.SetItemText(i, 3, tempStr1);
 					}
 					m_TrkChList.GetItemText(i, 4, curPhBuf, 31);
-					if (curCampID != campIdStr)
+					if (curPhBuf != tempStr2)
 					{
 						m_TrkChList.SetItemText(i, 4, tempStr2);
 					}
