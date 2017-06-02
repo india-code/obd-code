@@ -941,7 +941,7 @@ BOOL CSpiceOBDDlg::isCampaignChannelsCleared(int campaignKey)
 
 void CSpiceOBDDlg::CloseDBConn()
 {
-	//mysql_free_result(res);
+	mysql_free_result(res);
 
 	// Close a MySQL connection
 	mysql_close(connBase);
@@ -1108,29 +1108,39 @@ void CSpiceOBDDlg::LogErrorCodeAndMessage(int ch)
 void CSpiceOBDDlg::HangupCall(int ch)
 {
 	//Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
-	logger.log(LOGINFO, "Hangup Called for channel: %d, outbound IVRChannelNumber: %d", ch, ChInfo[ch].IVRChannelNumber);
-	if (ChInfo[ch].IVRChannelNumber != -1)
+	try
 	{
-		char errReason[100]; 
-		int code = SsmStopTalkWith(ChInfo[ch].IVRChannelNumber, ch); SsmGetLastErrMsg(errReason);
-		logger.log(LOGINFO, "Return code for SsmStopTalkWith(%d,%d) = %d reason = %s",ch, ChInfo[ch].IVRChannelNumber, code, errReason); //Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
-		code = -1;
-		code = SsmHangup(ChInfo[ch].IVRChannelNumber); SsmGetLastErrMsg(errReason);
-		logger.log(LOGINFO, "Return code for SsmHangup(%d) = %d reason = %s",ChInfo[ch].IVRChannelNumber,code, errReason); //Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
-		ChInfo[ChInfo[ch].IVRChannelNumber].InUse = false;
-		m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 3, L"");
-		m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 4, L"");
-		ChInfo[ch].IVRChannelNumber = -1;
+		logger.log(LOGINFO, "Hangup Called for channel: %d, outbound IVRChannelNumber: %d", ch, ChInfo[ch].IVRChannelNumber);
+		if (ChInfo[ch].IVRChannelNumber != -1)
+		{
+			char errReason[100];
+			int code = SsmStopTalkWith(ChInfo[ch].IVRChannelNumber, ch); SsmGetLastErrMsg(errReason);
+			logger.log(LOGINFO, "Return code for SsmStopTalkWith(%d,%d) = %d reason = %s", ch, ChInfo[ch].IVRChannelNumber, code, errReason); //Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
+			if (code != -1)
+			{
+				code = -1;
+				code = SsmHangup(ChInfo[ch].IVRChannelNumber); SsmGetLastErrMsg(errReason);
+				logger.log(LOGINFO, "Return code for SsmHangup(%d) = %d reason = %s", ChInfo[ch].IVRChannelNumber, code, errReason); //Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
+				ChInfo[ChInfo[ch].IVRChannelNumber].InUse = false;
+				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 3, L"");
+				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 4, L"");
+				ChInfo[ch].IVRChannelNumber = -1;
+			}
+		}
+		SsmClearRxDtmfBuf(ch);
+		SsmStopPlay(ch);
+		SsmHangup(ch);
+		ChInfo[ch].EnCalled = true;
+		IsUpdate = true;
+		ChInfo[ch].nStep = USER_IDLE;
+		if (StrCmpA(ChInfo[ch].CDRStatus.status, "") == 0) StrCpyA(ChInfo[ch].CDRStatus.status, "FAIL");
+		if (StrCmpA(ChInfo[ch].CDRStatus.reason, "") == 0) { char errReason[100]; SsmGetLastErrMsg(errReason); StrCpyA(ChInfo[ch].CDRStatus.reason, errReason); }
+		if (StrCmpA(ChInfo[ch].CDRStatus.reason_code, "") == 0) { char errorcode[8]; sprintf_s(errorcode, "%d", SsmGetLastErrCode()); StrCpyA(ChInfo[ch].CDRStatus.reason_code, errorcode); }
 	}
-	SsmClearRxDtmfBuf(ch);
-	SsmStopPlay(ch);
-	SsmHangup(ch);
-	ChInfo[ch].EnCalled = true;
-	IsUpdate = true;
-	ChInfo[ch].nStep = USER_IDLE;
-	if (StrCmpA(ChInfo[ch].CDRStatus.status, "") == 0) StrCpyA(ChInfo[ch].CDRStatus.status, "FAIL");
-	if (StrCmpA(ChInfo[ch].CDRStatus.reason, "") == 0) { char errReason[100]; SsmGetLastErrMsg(errReason); StrCpyA(ChInfo[ch].CDRStatus.reason, errReason); }
-	if (StrCmpA(ChInfo[ch].CDRStatus.reason_code, "") == 0) { char errorcode[8]; sprintf_s(errorcode, "%d", SsmGetLastErrCode()); StrCpyA(ChInfo[ch].CDRStatus.reason_code, errorcode); }
+	catch (...)
+	{
+		logger.log(LOGERR, "Exception Unhandled in Hangup call");
+	}
 }
 
 void CSpiceOBDDlg::HangupIVRCall(int ch)
@@ -1358,9 +1368,9 @@ void CSpiceOBDDlg::DoUserWork()
 				if (ChInfo[i].IVRChannelNumber != -1)
 				{
 					SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
-					ChInfo[i].IVRChannelNumber = -1;
 					SsmHangup(ChInfo[i].IVRChannelNumber);
 					ChInfo[ChInfo[i].IVRChannelNumber].InUse = false;
+					ChInfo[i].IVRChannelNumber = -1;
 				}
 				SsmClearRxDtmfBuf(i);
 				SsmHangup(i);
@@ -2095,6 +2105,7 @@ void CSpiceOBDDlg::DoUserWork()
 							SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
 							HangupCall(i);
 							HangupIVRCall(ChInfo[i].IVRChannelNumber);
+							ChInfo[i].IVRChannelNumber = -1;
 						}
 						ChInfo[i].ConsentState = 5;
 						logger.log(LOGINFO, "Call PatchedUp between Ch: %d and ivr Ch: %d", i, ChInfo[i].IVRChannelNumber);
@@ -2115,6 +2126,7 @@ void CSpiceOBDDlg::DoUserWork()
 						HangupCall(i);
 						HangupIVRCall(ChInfo[i].IVRChannelNumber);
 						logger.log(LOGINFO, "patch up failed with reason: %s", ChInfo[ChInfo[i].IVRChannelNumber].CDRStatus.reason);
+						ChInfo[i].IVRChannelNumber = -1;
 						break;
 					case DIAL_STANDBY:
 						nResult = SsmGetChStateKeepTime(ChInfo[i].IVRChannelNumber);
@@ -2126,6 +2138,7 @@ void CSpiceOBDDlg::DoUserWork()
 							StrCpyA(ChInfo[ChInfo[i].IVRChannelNumber].CDRStatus.status, "FAIL");
 							sprintf_s(ChInfo[ChInfo[i].IVRChannelNumber].CDRStatus.reason_code, "%hu", SsmGetReleaseReason(i));
 							HangupIVRCall(ChInfo[i].IVRChannelNumber);
+							ChInfo[i].IVRChannelNumber = -1;
 							//StrCpyA(ChInfo[i].CDRStatus.reason_code, "0");
 							//LogErrorCodeAndMessage(i);
 							//logger.log(LOGERR, "Channel State: %d at channel Number: %d", DIAL_STANDBY, i);
@@ -2144,6 +2157,7 @@ void CSpiceOBDDlg::DoUserWork()
 						//SsmStopSendTone(i);
 						HangupCall(i);
 						HangupIVRCall(ChInfo[i].IVRChannelNumber);
+						ChInfo[i].IVRChannelNumber = -1;
 					}
 					break;
 				case 5:
@@ -2166,6 +2180,7 @@ void CSpiceOBDDlg::DoUserWork()
 						m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, L"");
 						m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, L"");
 						ChInfo[i].ConsentState = ChInfo[i].levelNumber;
+						ChInfo[i].IVRChannelNumber = -1;
 						//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 						if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].levelNumber], -1, 0, -1) == -1)
 						{
@@ -2204,7 +2219,8 @@ void CSpiceOBDDlg::DoUserWork()
 						SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
 						HangupCall(i);
 						HangupIVRCall(ChInfo[i].IVRChannelNumber);
-						
+
+						ChInfo[i].IVRChannelNumber = -1;
 						char dateVal[25], timeVal[15];
 
 						tm dateTime = logger.getTime(dateVal);
@@ -2618,9 +2634,10 @@ void CSpiceOBDDlg::DoUserWork()
 					{
 						SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
 						SsmStopTalkWith(ChInfo[i].IVRChannelNumber, i);
-						ChInfo[i].IVRChannelNumber = -1;
 						HangupCall(i);
 						HangupIVRCall(ChInfo[i].IVRChannelNumber);
+
+						ChInfo[i].IVRChannelNumber = -1;
 						logger.log(LOGINFO, "call patchup Disconnected...");
 					}
 					break;
