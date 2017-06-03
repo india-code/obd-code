@@ -121,7 +121,7 @@ typedef struct
 	int channelsAllocated;
 	BOOL isCampaignCompleted;
 	char promptsDirectory[100];
-	char campaign_id[50];
+	char campaign_id[70];
 	char campaign_name[50];
 	char promptsPath[10][100];
 	OBD_DIAL_PLAN obdDialPlan;
@@ -137,7 +137,6 @@ private:
 	MYSQL_ROW row;
 	//int i;
 	void SetDiallingStartStopBtn(BOOL enableStart);
-	int callsDialling, callsConnected, callsPatchedUp;
 public:
 	WORD	nTotalCh;
 	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh, CGMaxCHNum;
@@ -156,9 +155,13 @@ public:
 	ofstream ConsentFile;
 	map<int, CampaignData> Campaigns;
 
-	void SetCallsDaillingCount(int callsDialling);
-	void SetCallsConnectedCount(int callsConnected);
-	void SetCallsPatchedUpCount(int callsPatchedUp);
+	struct ChCount
+	{
+		int nTotalCh;
+		int nIVRMaxCh;
+	};
+	static UINT SetChannelsStateCount(LPVOID  chCount);
+
 	BOOL UpdatePhNumbersStatus(int ch);
 	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();
@@ -211,7 +214,9 @@ public:
 	int m_SetMinLogLevel;
 	afx_msg void OnBnClickedDiallingStart();
 	afx_msg void OnBnClickedDiallingStop();
-	CStatic dailingValCtrl;
-	CStatic connctedValCtrl;
-	CStatic cgValCtrl;
+	static CStatic dailingValCtrl;
+	static CStatic connctedValCtrl;
+	static CStatic cgValCtrl;
+	static CStatic totalChannelsAvlCtrl;
+	static CStatic nChDownCtrl;
 };

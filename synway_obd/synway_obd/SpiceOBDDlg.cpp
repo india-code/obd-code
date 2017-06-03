@@ -64,6 +64,12 @@ int CSpiceOBDDlg::OffSet = ROW_COUNT;
 int CSpiceOBDDlg::row_count = ROW_COUNT;
 int CSpiceOBDDlg::getAndUpdateRowCount = 0;
 
+CStatic CSpiceOBDDlg::dailingValCtrl;
+CStatic CSpiceOBDDlg::connctedValCtrl;
+CStatic CSpiceOBDDlg::cgValCtrl;
+CStatic CSpiceOBDDlg::nChDownCtrl;
+CStatic CSpiceOBDDlg::totalChannelsAvlCtrl;
+
 void CSpiceOBDDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
@@ -72,6 +78,8 @@ void CSpiceOBDDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_DAILING_VALUE, dailingValCtrl);
 	DDX_Control(pDX, IDC_CONNECTED_VALUE, connctedValCtrl);
 	DDX_Control(pDX, IDC_CG_VALUE, cgValCtrl);
+	DDX_Control(pDX, IDC_TOTCH_VAL, totalChannelsAvlCtrl);
+	DDX_Control(pDX, IDC_CHDWN_VAL, nChDownCtrl);
 }
 
 BEGIN_MESSAGE_MAP(CSpiceOBDDlg, CDialogEx)
@@ -1122,6 +1130,7 @@ void CSpiceOBDDlg::HangupCall(int ch)
 				code = SsmHangup(ChInfo[ch].IVRChannelNumber); SsmGetLastErrMsg(errReason);
 				logger.log(LOGINFO, "Return code for SsmHangup(%d) = %d reason = %s", ChInfo[ch].IVRChannelNumber, code, errReason); //Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
 				ChInfo[ChInfo[ch].IVRChannelNumber].InUse = false;
+				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 1, L"");
 				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 3, L"");
 				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 4, L"");
 				ChInfo[ch].IVRChannelNumber = -1;
@@ -1152,6 +1161,7 @@ void CSpiceOBDDlg::HangupIVRCall(int ch)
 		logger.log(LOGINFO, "Return code for SsmHangup(%d) = %d reason = %s", ch, code, errReason); 
 		//Added by sandeep rajan - 24th May, 2017 to clear the CG ANI and BNI columns after call completes on CG channels.
 		try{
+			m_TrkChList.SetItemText(ch, 1, L"");
 			m_TrkChList.SetItemText(ch, 3, L"");
 			m_TrkChList.SetItemText(ch, 4, L"");
 		}
@@ -1240,25 +1250,58 @@ char* CSpiceOBDDlg::GetReleaseErrorReason(WORD errorCode)
 }
 
 
+UINT CSpiceOBDDlg::SetChannelsStateCount(LPVOID  chCount)
+{
+	int totCount = SsmGetMaxCh();
+	if (totCount > 0)
+	{
+		CString totChstr;
+		totChstr.Format(_T("%d"), totCount);
+		totalChannelsAvlCtrl.SetWindowTextW(totChstr);
+	}
 
-void CSpiceOBDDlg::SetCallsDaillingCount(int callsDialling)
-{
-	CString DailStr;
-	DailStr.Format(_T("%d"), callsDialling);
-	dailingValCtrl.SetWindowTextW(DailStr);
-	DailStr.Empty();
-}
-void CSpiceOBDDlg::SetCallsConnectedCount(int callsConnected)
-{
-	CString ConnStr;
-	ConnStr.Format(_T("%d"), callsConnected);
-	connctedValCtrl.SetWindowTextW(ConnStr);
-}
-void CSpiceOBDDlg::SetCallsPatchedUpCount(int callsPatchedUp)
-{
-	CString CgStr;
-	CgStr.Format(_T("%d"), callsPatchedUp);
-	cgValCtrl.SetWindowTextW(CgStr);
+	ChCount* chnlCount = (ChCount*)chCount;
+	while (true)
+	{
+		Sleep(2000);
+		int callsDialling = 0, callsConnected = 0, callsPatchedUp = 0, channelsDown = 0;
+		CString DailStr, ConnStr, CgStr, chDownStr;
+		for (int i = 0; i < chnlCount->nTotalCh; i++)
+		{
+			int chState = SsmGetChState(i);
+			if (chState == S_CALL_TALKING)
+			{
+				if (i < chnlCount->nIVRMaxCh)
+				{
+					callsPatchedUp++;
+				}
+				else
+				{
+					callsConnected++;
+				}
+			}
+			if (chState == S_CALL_WAIT_REMOTE_PICKUP || chState == S_ISUP_WaitDialAnswer)
+			{
+				callsDialling++;
+			}
+			if (chState == S_CALL_UNAVAILABLE || chState == S_ISUP_RemotelyBlocked || chState == S_ISUP_WaitReset)
+			{
+				channelsDown++;
+			}
+		}
+		
+		DailStr.Format(_T("%d"), callsDialling);
+		dailingValCtrl.SetWindowTextW(DailStr);
+
+		ConnStr.Format(_T("%d"), callsConnected);
+		connctedValCtrl.SetWindowTextW(ConnStr);
+		
+		CgStr.Format(_T("%d"), callsPatchedUp);
+		cgValCtrl.SetWindowTextW(CgStr);
+
+		chDownStr.Format(_T("%d"), channelsDown);
+		nChDownCtrl.SetWindowTextW(chDownStr);
+	}
 }
 
 void CSpiceOBDDlg::DoUserWork()
@@ -1301,15 +1344,20 @@ void CSpiceOBDDlg::DoUserWork()
 					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tempCampId).phnumBuf.front().ani);
 					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tempCampId).phnumBuf.front().encryptedAni);
 
-					CString tempStr2(Campaigns.at(tempCampId).phnumBuf.front().ani), tempStr1(ChInfo[i].CDRStatus.cli), campIdStr;
+					CString tempStr2(Campaigns.at(tempCampId).phnumBuf.front().ani), tempStr1(ChInfo[i].CDRStatus.cli), campIdStr, campNameStr(Campaigns.at(tempCampId).campaign_name);
 					//setting caller ID 
 					if (SsmSetTxCallerId(i, ChInfo[i].CDRStatus.cli) == -1)
 					{
 						getErrorResult(_T(" SsmSetTxCallerId"));
 					}
-					wchar_t curCLI[20], curCampID[31], curPhBuf[31];
+					wchar_t curCLI[20], curCampID[31], curPhBuf[31], curCampName[50];
 
 					campIdStr.Format(_T("%d"), tempCampId);
+					m_TrkChList.GetItemText(i, 1, curCampName, 50);
+					if (curCampName != campNameStr)
+					{
+						m_TrkChList.SetItemText(i, 1, campNameStr);
+					}
 					m_TrkChList.GetItemText(i, 3, curCLI, 20);
 					if (curCLI != tempStr1)
 					{
@@ -1339,6 +1387,7 @@ void CSpiceOBDDlg::DoUserWork()
 				{
 					StrCpyA(ChInfo[i].pPhoNumBuf, "");
 					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
+					m_TrkChList.SetItemText(i, 1, L"");
 					m_TrkChList.SetItemText(i, 3, L"");
 					m_TrkChList.SetItemText(i, 4, L"");
 					m_TrkChList.SetItemText(i, 5, L"");
@@ -1351,8 +1400,6 @@ void CSpiceOBDDlg::DoUserWork()
 					ChInfo[i].nStep = USER_WAIT_REMOTE_PICKUP;
 					ChInfo[i].CDRStatus.call_time = time(0);
 					ChInfo[i].CDRStatus.answer_time = 0;
-					callsDialling++;
-					//SetCallsDaillingCount(callsDialling);
 					//logger.log(LOGINFO, "Number Dialed on channel: %d ", i);
 				}
 				else
@@ -1420,8 +1467,6 @@ void CSpiceOBDDlg::DoUserWork()
 						}
 					}
 				}
-				callsDialling--;
-				//SetCallsDaillingCount(callsDialling);
 				break;
 			case DIAL_FAILURE:
 			case DIAL_NO_DIALTONE:
@@ -1436,8 +1481,6 @@ void CSpiceOBDDlg::DoUserWork()
 				sprintf_s(ChInfo[i].CDRStatus.reason_code, "%hu", releaseCode);
 				StrCpyA(ChInfo[i].CDRStatus.reason, GetReleaseErrorReason(releaseCode));
 				HangupCall(i);
-				callsDialling--;
-				//SetCallsDaillingCount(callsDialling);
 				break;
 			case DIAL_STANDBY:
 				nResult = SsmGetChStateKeepTime(i);
@@ -1452,8 +1495,6 @@ void CSpiceOBDDlg::DoUserWork()
 					//LogErrorCodeAndMessage(i);
 					//logger.log(LOGERR, "Channel State: %d at channel Number: %d", DIAL_STANDBY, i);
 					HangupCall(i);
-					callsDialling--;
-					//SetCallsDaillingCount(callsDialling);
 				}
 				break;
 
@@ -1472,8 +1513,6 @@ void CSpiceOBDDlg::DoUserWork()
 				StrCpyA(ChInfo[i].CDRStatus.status, "FAIL");
 				StrCpyA(ChInfo[i].CDRStatus.reason, GetReleaseErrorReason(releaseCode));
 				HangupCall(i);
-				callsDialling--;
-				//SetCallsDaillingCount(callsDialling);
 			}
 			break;
 		case USER_TALKING:
@@ -1741,7 +1780,8 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
 									//Set cli and DNIS for call patchedup
-									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS), campNameStr(Campaigns.at(tempCampId).campaign_name);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 1, campNameStr);
 									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
 									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
@@ -1888,7 +1928,8 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
 									//Set cli and DNIS for call patchedup
-									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS), campNameStr(Campaigns.at(tempCampId).campaign_name);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 1, campNameStr);
 									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
 									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
@@ -2034,7 +2075,8 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
 									//Set cli and DNIS for call patchedup
-									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS);
+									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS), campNameStr(Campaigns.at(tempCampId).campaign_name);
+									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 1, campNameStr);
 									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
 									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
 									//logger.log(LOGINFO, "phone number: %s, patch DNIS : %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
@@ -2177,6 +2219,7 @@ void CSpiceOBDDlg::DoUserWork()
 
 						SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
 						HangupIVRCall(ChInfo[i].IVRChannelNumber);
+						m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 1, L"");
 						m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, L"");
 						m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, L"");
 						ChInfo[i].ConsentState = ChInfo[i].levelNumber;
@@ -4075,9 +4118,6 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 {
 	try {
 		//ReadNumbersFromFiles();
-		callsDialling = 0; 
-		callsConnected = 0;
-		callsPatchedUp = 0;
 		if (GetDBData() == TRUE)
 		{
 			//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
@@ -4186,6 +4226,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 					StrCpyA(ChInfo[i].CDRStatus.reason_code, "");
 				}
 			}
+			CWinThread* bThread = AfxBeginThread(SetChannelsStateCount, new ChCount{ nTotalCh, CGMaxCHNum });
 			//Loading wav file on different positions for all campaigns
 //			char alias[10];
 			//int index = 0;
