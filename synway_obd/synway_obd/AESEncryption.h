@@ -6,6 +6,6 @@ class AESEncryption
 	char * EncryptionKey;
 public:
 	AESEncryption(char* key);	
-	char* DecodeAndDecrypt(char* EncodedandEncrypted);
+	std::string DecodeAndDecrypt(char* EncodedandEncrypted);
 	std::string EncryptAndEncode(char InputBuff[]);
 };

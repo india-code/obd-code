@@ -3,10 +3,10 @@
 
 AESEncryption::AESEncryption(char* key):EncryptionKey(key){}
 
-char* AESEncryption::DecodeAndDecrypt(char* EncodedandEncrypted)
+std::string AESEncryption::DecodeAndDecrypt(char* EncodedandEncrypted)
 {
 	AesCtx context;
-	char* DecryptedBuff = new char[31];
+	char DecryptedBuff [31];
 	AesSetKey(&context, AES_KEY_128BIT, BLOCKMODE_ECB, EncryptionKey, NULL);
 	std::string decoded = base64_decode(EncodedandEncrypted);
 	char *c = const_cast<char*>(decoded.c_str());

@@ -295,20 +295,20 @@ BOOL CSpiceOBDDlg::GetDBData()
 				{
 					isNewCampaign = false;
 					//StrCpyA(Campaigns.at(campaignKey).CLI, row[1]);
-					std::string strBuf = row[1];
-					size_t offset;
-					Campaigns.at(campaignKey).cliList.clear();
-					//vector<std::string>().swap(Campaigns.at(campaignKey).cliList);
-					while ((offset = strBuf.find("#")) != std::string::npos)
-					{
-						Campaigns.at(campaignKey).cliList.push_back(strBuf.substr(0, offset));
-						strBuf.erase(0, offset + 1);
-					}
+					//std::string strBuf = row[1];
+					//size_t offset;
+					//Campaigns.at(campaignKey).cliList.clear();
+					////vector<std::string>().swap(Campaigns.at(campaignKey).cliList);
+					//while ((offset = strBuf.find("#")) != std::string::npos)
+					//{
+					//	Campaigns.at(campaignKey).cliList.push_back(strBuf.substr(0, offset));
+					//	strBuf.erase(0, offset + 1);
+					//}
 
-					if (Campaigns.at(campaignKey).cliList.empty())
-					{
-						Campaigns.at(campaignKey).cliList.push_back(strBuf);
-					}
+					//if (Campaigns.at(campaignKey).cliList.empty())
+					//{
+					//	Campaigns.at(campaignKey).cliList.push_back(strBuf);
+					//}
 					Campaigns.at(campaignKey).channelsAllocated = atoi(row[2]);
 					StrCpyA(Campaigns.at(campaignKey).promptsDirectory, row[3]);
 					Campaigns.at(campaignKey).obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
@@ -363,21 +363,21 @@ BOOL CSpiceOBDDlg::GetDBData()
 					CString err(mysql_error(connBase));
 					AfxMessageBox(err);
 				}
-				while (!Campaigns.at(campKey).phnumBuf.empty())
+				/*while (!Campaigns.at(campKey).phnumBuf.empty())
 				{
 					delete Campaigns.at(campKey).phnumBuf.front().ani;
 					Campaigns.at(campKey).phnumBuf.erase(Campaigns.at(campKey).phnumBuf.begin());
-				}
+				}*/
 				MYSQL_RES * resPhBuf = mysql_store_result(connBase);
 				MYSQL_ROW rowPhBuf;
 				
-				Campaigns.at(campKey).phnumBuf.clear();
-				//vector<pnNumWithEncryptedAni>().swap(Campaigns.at(campKey).phnumBuf);
+				//Campaigns.at(campKey).phnumBuf.clear();
+				vector<pnNumWithEncryptedAni>().swap(Campaigns.at(campKey).phnumBuf);
 				while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
 				{
 					size_t curIndex = Campaigns.at(campKey).phnumBuf.size();
 					logger.log(LOGINFO, "Going for decryption of the string buffer:  %s size of campaigns is:%d", rowPhBuf[0], Campaigns.size());
-					char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
+					std::string DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
 					Campaigns.at(campKey).phnumBuf.push_back({ DecryptedVal, "" });
 					StrCpyA(Campaigns.at(campKey).phnumBuf.at(curIndex).encryptedAni, rowPhBuf[0]);
 				}
@@ -1341,10 +1341,10 @@ void CSpiceOBDDlg::DoUserWork()
 				if (!Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling && IsDailingTimeInRange)
 				{
 					StrCpyA(ChInfo[i].CDRStatus.cli, Campaigns.at(tempCampId).cliList.at(rand() % Campaigns.at(tempCampId).cliList.size()).c_str());//picking random CLI
-					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tempCampId).phnumBuf.front().ani);
+					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tempCampId).phnumBuf.front().ani.c_str());
 					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tempCampId).phnumBuf.front().encryptedAni);
 
-					CString tempStr2(Campaigns.at(tempCampId).phnumBuf.front().ani), tempStr1(ChInfo[i].CDRStatus.cli), campIdStr, campNameStr(Campaigns.at(tempCampId).campaign_name);
+					CString tempStr2(Campaigns.at(tempCampId).phnumBuf.front().ani.c_str()), tempStr1(ChInfo[i].CDRStatus.cli), campIdStr, campNameStr(Campaigns.at(tempCampId).campaign_name);
 					//setting caller ID 
 					if (SsmSetTxCallerId(i, ChInfo[i].CDRStatus.cli) == -1)
 					{
@@ -1373,7 +1373,7 @@ void CSpiceOBDDlg::DoUserWork()
 					{
 						m_TrkChList.SetItemText(i, 5, campIdStr);
 					}
-					delete Campaigns.at(tempCampId).phnumBuf.front().ani;
+					//delete Campaigns.at(tempCampId).phnumBuf.front().ani;
 					Campaigns.at(tempCampId).phnumBuf.erase(Campaigns.at(tempCampId).phnumBuf.begin());
 					ChInfo[i].isAvailable = false;
 					logger.log(LOGINFO, "DoUserWork Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);

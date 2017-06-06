@@ -97,20 +97,20 @@ public:
 	}
 	void log(LogLevel logger, const char* format...) {
 
-		char* time_value;
+		//char* time_value;
 		int log_level = 0;
 		va_list args;
 
-		time_value = (char*)malloc(26 * sizeof(char));
-		getTime(time_value);
+		//time_value = (char*)malloc(26 * sizeof(char));
+		//getTime(time_value);
 		va_start(args, format);
 		switch (logger) {
-			case 0:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Trace   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 0:if ((int)logger >= MinLogLevel) { /*fprintf(fp, time_value);*/ fprintf(fp, " Trace   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
 		   //case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Debug   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-			case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Info    : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 1:if ((int)logger >= MinLogLevel) { /*fprintf(fp, time_value);*/ fprintf(fp, " Info    : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
 		   //case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Warning : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-			case 2:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Error   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-			case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 2:if ((int)logger >= MinLogLevel) { /*fprintf(fp, time_value);*/ fprintf(fp, " Error   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 3:if ((int)logger >= MinLogLevel) { /*fprintf(fp, time_value);*/ fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
 		}
 		va_end(args);
 		if (ftell(fp) >= 10000000)

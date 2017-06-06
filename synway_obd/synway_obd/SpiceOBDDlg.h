@@ -108,7 +108,7 @@ typedef struct {
 
 typedef struct
 {
-	char* ani;
+	std::string ani;
 	char encryptedAni[31];
 }pnNumWithEncryptedAni;
 
