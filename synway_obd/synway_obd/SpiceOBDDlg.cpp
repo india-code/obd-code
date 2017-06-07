@@ -294,7 +294,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 				if (StrCmpA(Campaigns.at(campaignKey).campaign_id, row[0]) == 0)
 				{
 					isNewCampaign = false;
-					//StrCpyA(Campaigns.at(campaignKey).CLI, row[1]);
+					////StrCpyA(Campaigns.at(campaignKey).CLI, row[1]);
 					//std::string strBuf = row[1];
 					//size_t offset;
 					//Campaigns.at(campaignKey).cliList.clear();
@@ -750,8 +750,8 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			ChInfo[i].CDRStatus.channel = i;
 			StrCpyA(ChInfo[i].CDRStatus.ani, ChInfo[i].pPhoNumBuf);
 			char dateVal[25], timeVal[15], call_time[20], answer_time[20], end_time[20];
-			tm ct, at, et;
-			tm dateTime = logger.getTime(dateVal);
+			tm ct, at, et;  
+			tm dateTime = logger.getTime(std::string());
 			sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
 			sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
 
@@ -813,9 +813,9 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 				logger.log(LOGINFO, "Reason not updated...ph number: %s, encrypted ani: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani);
 			}
 			//Insert Call records in DB
-			sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_calls(channel, campaign_id, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id, song_name, patch_dnis) \
-				VALUES(%d, '%s', 'Idea %s', '%s', '%s', '%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s', '%s', '%s')",
-				ChInfo[i].CDRStatus.channel, Campaigns.at(tmpCmpId).campaign_id, circle, ChInfo[i].CDRStatus.ani, ChInfo[i].CDRStatus.cli, ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.answer_duration,
+			sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_calls(channel, campaign_id, campaign_name, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id, song_name, patch_dnis) \
+				VALUES(%d, '%s', '%s', 'Idea %s', '%s', '%s', '%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s', '%s', '%s')",
+				ChInfo[i].CDRStatus.channel, Campaigns.at(tmpCmpId).campaign_id, Campaigns.at(tmpCmpId).campaign_name, circle, ChInfo[i].CDRStatus.ani, ChInfo[i].CDRStatus.cli, ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.answer_duration,
 				StrCmpA(ChInfo[i].CDRStatus.status, "SUCCESS") == 0 ? 1 : 0, ChInfo[i].CDRStatus.callPatch_duration, dateVal, call_time, answer_time, end_time, ChInfo[i].CDRStatus.reason_code,
 				ChInfo[i].CDRStatus.total_duration, ChInfo[i].CDRStatus.reason, ChInfo[i].CDRStatus.encrypted_ani, ChInfo[i].CDRStatus.ani, timeVal, ChInfo[i].CDRStatus.songName, ChInfo[i].CDRStatus.DNISBuf);
 
@@ -1280,11 +1280,11 @@ UINT CSpiceOBDDlg::SetChannelsStateCount(LPVOID  chCount)
 					callsConnected++;
 				}
 			}
-			if (chState == S_CALL_WAIT_REMOTE_PICKUP || chState == S_ISUP_WaitDialAnswer)
+			else if (chState == S_CALL_WAIT_REMOTE_PICKUP || chState == S_ISUP_WaitDialAnswer)
 			{
 				callsDialling++;
 			}
-			if (chState == S_CALL_UNAVAILABLE || chState == S_ISUP_RemotelyBlocked || chState == S_ISUP_WaitReset)
+			else if (chState == S_CALL_UNAVAILABLE || chState == S_ISUP_RemotelyBlocked || chState == S_ISUP_WaitReset)
 			{
 				channelsDown++;
 			}
@@ -2239,7 +2239,7 @@ void CSpiceOBDDlg::DoUserWork()
 						
 						char dateVal[25], timeVal[15];
 					
-						tm dateTime = logger.getTime(dateVal);
+						tm dateTime = logger.getTime(std::string());
 						sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
 						sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
 						ConsentFile << circle << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].pPhoNumBuf
@@ -2266,7 +2266,7 @@ void CSpiceOBDDlg::DoUserWork()
 						ChInfo[i].IVRChannelNumber = -1;
 						char dateVal[25], timeVal[15];
 
-						tm dateTime = logger.getTime(dateVal);
+						tm dateTime = logger.getTime(std::string());
 						sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
 						sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
 						ConsentFile << circle << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].pPhoNumBuf
@@ -4063,7 +4063,7 @@ void CSpiceOBDDlg::openCDRLogFile()
 	char CurPath[260];
 	char fileName[50];
 	char folderName[50];
-	char timeValue[25];
+	//char timeValue[25];
 
 	GetCurrentDirectoryA(200, CurPath);
 	StrCatA(CurPath, "\\CDRLogs");
@@ -4071,7 +4071,7 @@ void CSpiceOBDDlg::openCDRLogFile()
 	{
 		CreateDirectoryA(CurPath, NULL);
 	}
-	tm timeVal = logger.getTime(timeValue);
+	tm timeVal = logger.getTime(std::string());
 	sprintf_s(folderName, "\\CDRInfo_%04d%02d", timeVal.tm_year + 1900, timeVal.tm_mon + 1);
 	StrCatA(CurPath, folderName);
 
@@ -4091,7 +4091,7 @@ void CSpiceOBDDlg::openConsentLogFile()
 	char CurPath[260];
 	char fileName[50];
 	char folderName[50];
-	char timeValue[25];
+	//char timeValue[25];
 
 	GetCurrentDirectoryA(200, CurPath);
 	StrCatA(CurPath, "\\ConsentLogs");
@@ -4099,7 +4099,7 @@ void CSpiceOBDDlg::openConsentLogFile()
 	{
 		CreateDirectoryA(CurPath, NULL);
 	}
-	tm timeVal = logger.getTime(timeValue);
+	tm timeVal = logger.getTime(std::string());
 	sprintf_s(folderName, "\\ConsentInfo_%04d%02d", timeVal.tm_year + 1900, timeVal.tm_mon + 1);
 	StrCatA(CurPath, folderName);
 
@@ -4252,8 +4252,8 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 	{
 		logger.log(LOGERR, "On Timer Start");
 		//Number should be dialled only between 8AM IST to 8:45 PM IST 
-		char dateVal[25];
-		tm dateTime = logger.getTime(dateVal);
+		//char dateVal[25];
+		tm dateTime = logger.getTime(std::string());
 		if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 8 || dateTime.tm_hour >= 21)
 		{
 			IsDailingTimeInRange = false;
