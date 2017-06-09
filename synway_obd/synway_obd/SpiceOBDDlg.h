@@ -117,6 +117,10 @@ typedef struct
 	vector<pnNumWithEncryptedAni> phnumBuf;
 	vector<std::string> cliList;
 	//char CLI[31];
+	char testCallNumber[31];
+	int testCallCounter;
+	int tmpCallCounter;
+	BOOL testCallflag;
 	char first_consent_digit[5];
 	int channelsAllocated;
 	BOOL isCampaignCompleted;
@@ -132,7 +136,7 @@ typedef struct
 class CSpiceOBDDlg : public CDialogEx
 {
 private:
-	MYSQL* conn, *connBase, *connSelect, *connInsert, *connUpdate, *connPort;
+	MYSQL* conn, *connBase, *connSelect, *connInsert, *connUpdate, *connPort, *connCallProc;
 	MYSQL_RES *res;
 	MYSQL_ROW row;
 	//int i;
@@ -143,7 +147,7 @@ public:
 	char circle[20], zone[20];
 	CH_INFO* ChInfo;
 	CLogger logger;
-	int totalPhoneNumbers;
+	//BOOL isReloadConfiguration;
 	static int OffSet, row_count, getAndUpdateRowCount;
 	AESEncryption aesEncryption;
 	bool IsUpdate;
@@ -162,6 +166,7 @@ public:
 	};
 	static UINT SetChannelsStateCount(LPVOID  chCount);
 
+	void CallProcedure(std::string & );
 	BOOL UpdatePhNumbersStatus(int ch);
 	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();

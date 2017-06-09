@@ -169,12 +169,14 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	connInsert = mysql_init(NULL);
 	connUpdate = mysql_init(NULL);
 	connPort = mysql_init(NULL);
+	connCallProc = mysql_init(NULL);
 	//Data stored in DBSettings.INI file
 	char host[255];
 	char DBName[255];
 	char username[255];
 	char password[255];
 	int port;
+	//unsigned int connTimeOut = 365 * 24 * 3600;
 	char CurPath[260], InitDBSettings[260];
 	GetCurrentDirectoryA(200, CurPath);
 	StrCpyA(InitDBSettings, CurPath);
@@ -189,33 +191,43 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	CGMaxCHNum = GetPrivateProfileIntA("Database", "CGMaxCHNum", 30, InitDBSettings);
 	//nTotalCh = GetPrivateProfileIntA("Database", "TotalChannelsCount", 90, InitDBSettings);
 	logger.log(LOGINFO, "host: %s, username: %s, password: %s, dbname: %s, port: %d", host, username, password, DBName, port);
-
+	//mysql_options(conn, MYSQL_OPT_CONNECT_TIMEOUT, &connTimeOut);
 	if (mysql_real_connect(conn, host, username, password, DBName, port, NULL, 0) == 0)
 	{
 		AfxMessageBox(L"Connection failed to Database");
 		PostQuitMessage(0);
 	}
+	//mysql_options(connBase, MYSQL_OPT_CONNECT_TIMEOUT, &connTimeOut);
 	if (mysql_real_connect(connBase, host, username, password, DBName, port, NULL, 0) == 0)
 	{
 		AfxMessageBox(L"Connection failed to Database for Dialer base");
 		PostQuitMessage(0);
 	}
+	//mysql_options(connSelect, MYSQL_OPT_CONNECT_TIMEOUT, &connTimeOut);
 	if (mysql_real_connect(connSelect, host, username, password, DBName, port, NULL, 0) == 0)
 	{
 		AfxMessageBox(L"Connection failed to Database for Dialer base");
 		PostQuitMessage(0);
 	}
+	//mysql_options(connInsert, MYSQL_OPT_CONNECT_TIMEOUT, &connTimeOut);
 	if (mysql_real_connect(connInsert, host, username, password, DBName, port, NULL, 0) == 0)
 	{
 		AfxMessageBox(L"Connection failed to Database for Dialer base");
 		PostQuitMessage(0);
 	}
+	//mysql_options(connUpdate, MYSQL_OPT_CONNECT_TIMEOUT, &connTimeOut);
 	if (mysql_real_connect(connUpdate, host, username, password, DBName, port, NULL, 0) == 0)
 	{
 		AfxMessageBox(L"Connection failed to Database for Dialer base");
 		PostQuitMessage(0);
 	}
+	//mysql_options(connPort, MYSQL_OPT_CONNECT_TIMEOUT, &connTimeOut);
 	if (mysql_real_connect(connPort, host, username, password, DBName, port, NULL, 0) == 0)
+	{
+		AfxMessageBox(L"Connection failed to Database for Dialer base");
+		PostQuitMessage(0);
+	}
+	if (mysql_real_connect(connCallProc, host, username, password, DBName, port, NULL, CLIENT_MULTI_STATEMENTS | CLIENT_MULTI_RESULTS) == 0)
 	{
 		AfxMessageBox(L"Connection failed to Database for Dialer base");
 		PostQuitMessage(0);
@@ -257,6 +269,63 @@ void CSpiceOBDDlg::SetChannelInitialStatus()
 	UpDateATrunkChListCtrl();
 }
 
+void CSpiceOBDDlg::CallProcedure(std::string & campaign_id)
+{
+	MYSQL_BIND bind[1];
+	MYSQL_STMT *stmt;
+	DWORD str_length;
+	char str_data[50];
+
+	char PROC_SAMPLE[] = "CALL procDeallocateChannel(?)";
+
+	logger.log(LOGINFO, "CallProcedure function start campaign_id : %s", campaign_id.c_str());
+	stmt = mysql_stmt_init(connCallProc);
+	if (!stmt)
+	{
+		logger.log(LOGERR, " mysql_stmt_init(), out of memory");
+	}
+	if (mysql_stmt_prepare(stmt, PROC_SAMPLE, strlen(PROC_SAMPLE)))
+	{
+		logger.log(LOGERR, " mysql_stmt_prepare(), procedure failed");
+		logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+	}
+	int param_count = mysql_stmt_param_count(stmt);
+
+	if (param_count != 1) /* validate parameter count */
+	{
+		logger.log(LOGERR, " invalid parameter count returned by MySQL");
+	}
+
+	memset(bind, 0, sizeof(bind));
+
+	/* STRING PARAM */
+	/* This is a number type, so there is no need
+	to specify buffer_length */
+	bind[0].buffer_type = MYSQL_TYPE_STRING;
+	bind[0].buffer = (char*)str_data;
+	bind[0].buffer_length = 1024;
+	bind[0].is_null = 0;
+	bind[0].length = &str_length;
+
+	if (mysql_stmt_bind_param(stmt, bind))
+	{
+		logger.log(LOGERR, " mysql_stmt_bind_param() failed");
+		logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+	}
+
+	strncpy_s(str_data, campaign_id.c_str(), 50); /* string  */
+	str_length = strlen(str_data);
+
+
+	if (mysql_stmt_execute(stmt))
+	{
+		logger.log(LOGERR, " mysql_stmt_execute(), 1 failed");
+		logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+	}
+	mysql_stmt_close(stmt);
+}
+
+
 BOOL CSpiceOBDDlg::GetDBData()
 {
 	/***  Read Records  ***/
@@ -264,11 +333,13 @@ BOOL CSpiceOBDDlg::GetDBData()
 	{
 		//call to decrypt values read from DB
 		int query_state;
-		char queryStr[256];
+		char queryStr[512];
 
-		StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type, circle, zone, campaign_name, first_consent_digit from tbl_campaign_master where campaign_status = 1 and base_status = 1 and prompts_status = 1 order by camp_seqId");
+		StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type, circle, zone, campaign_name, first_consent_digit,test_callnumber, test_callctr, test_callflag\
+			  from tbl_campaign_master where (campaign_status = 1 or campaign_status = 2) and (base_status = 1 or test_callflag = 1) and prompts_status = 1 \
+				order by camp_seqId");
 
-		//logger.log(LOGINFO, queryStr);
+		logger.log(LOGINFO, queryStr);
 
 		query_state = mysql_query(conn, queryStr);
 
@@ -294,26 +365,30 @@ BOOL CSpiceOBDDlg::GetDBData()
 				if (StrCmpA(Campaigns.at(campaignKey).campaign_id, row[0]) == 0)
 				{
 					isNewCampaign = false;
-					////StrCpyA(Campaigns.at(campaignKey).CLI, row[1]);
-					//std::string strBuf = row[1];
-					//size_t offset;
+					//StrCpyA(Campaigns.at(campaignKey).CLI, row[1]);
+					std::string strBuf = row[1];
+					size_t offset;
 					//Campaigns.at(campaignKey).cliList.clear();
-					////vector<std::string>().swap(Campaigns.at(campaignKey).cliList);
-					//while ((offset = strBuf.find("#")) != std::string::npos)
-					//{
-					//	Campaigns.at(campaignKey).cliList.push_back(strBuf.substr(0, offset));
-					//	strBuf.erase(0, offset + 1);
-					//}
+					vector<std::string>().swap(Campaigns.at(campaignKey).cliList);
+					while ((offset = strBuf.find("#")) != std::string::npos)
+					{
+						Campaigns.at(campaignKey).cliList.push_back(strBuf.substr(0, offset));
+						strBuf.erase(0, offset + 1);
+					}
 
-					//if (Campaigns.at(campaignKey).cliList.empty())
-					//{
-					//	Campaigns.at(campaignKey).cliList.push_back(strBuf);
-					//}
+					if (Campaigns.at(campaignKey).cliList.empty())
+					{
+						Campaigns.at(campaignKey).cliList.push_back(strBuf);
+					}
 					Campaigns.at(campaignKey).channelsAllocated = atoi(row[2]);
 					StrCpyA(Campaigns.at(campaignKey).promptsDirectory, row[3]);
 					Campaigns.at(campaignKey).obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
 					//StrCpyA(tempdata.campaign_name, row[7]);
 					StrCpyA(Campaigns.at(campaignKey).first_consent_digit, row[8]);
+
+					StrCpyA(Campaigns.at(campaignKey).testCallNumber, row[9]);
+					Campaigns.at(campaignKey).testCallCounter = atoi(row[10]);
+					Campaigns.at(campaignKey).testCallflag = atoi(row[11]);
 
 					Campaigns.at(campaignKey).minCh = channelsOccupied + 1;
 					channelsOccupied = Campaigns.at(campaignKey).minCh + Campaigns.at(campaignKey).channelsAllocated - 1;
@@ -341,6 +416,12 @@ BOOL CSpiceOBDDlg::GetDBData()
 				tempdata.obdDialPlan = (OBD_DIAL_PLAN)atoi(row[4]);
 				StrCpyA(tempdata.campaign_name, row[7]);
 				StrCpyA(tempdata.first_consent_digit, row[8]);
+
+				//Initialize call counter for each campaign;
+				StrCpyA(tempdata.testCallNumber, row[9]);
+				tempdata.testCallCounter = atoi(row[10]);
+				tempdata.testCallflag = atoi(row[11]);
+				tempdata.tmpCallCounter = 0;
 
 				tempdata.minCh = channelsOccupied + 1;
 				channelsOccupied = tempdata.minCh + tempdata.channelsAllocated - 1;
@@ -370,7 +451,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 				}*/
 				MYSQL_RES * resPhBuf = mysql_store_result(connBase);
 				MYSQL_ROW rowPhBuf;
-				
+				BOOL isCampaignCompleted = true;
 				//Campaigns.at(campKey).phnumBuf.clear();
 				vector<pnNumWithEncryptedAni>().swap(Campaigns.at(campKey).phnumBuf);
 				while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
@@ -380,8 +461,28 @@ BOOL CSpiceOBDDlg::GetDBData()
 					std::string DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
 					Campaigns.at(campKey).phnumBuf.push_back({ DecryptedVal, "" });
 					StrCpyA(Campaigns.at(campKey).phnumBuf.at(curIndex).encryptedAni, rowPhBuf[0]);
+					isCampaignCompleted = false;
 				}
 				mysql_free_result(resPhBuf);
+				//checks if this campaign completed.
+				if (isCampaignCompleted)
+				{
+					std::string tmpCampaignID = Campaigns.at(campKey).campaign_id;
+					logger.log(LOGINFO, "CallProcedure called campaign_id : %s", tmpCampaignID.c_str());
+					CallProcedure(tmpCampaignID);
+					//char queryProcStr[256];
+					////mysql_stmt_prepare()
+					//sprintf_s(queryProcStr, "CALL procDeallocateChannel('%s')", Campaigns.at(campKey).campaign_id);
+					//logger.log(LOGINFO, "queryProcStr: %s", queryProcStr);
+					//mysql_query(connCallProc, queryProcStr);
+					////logger.log(LOGINFO, "query_stateUpdate: %d", query_stateUpdate);
+					//int query_stateUpdate = mysql_next_result(connCallProc);
+					//if (query_stateUpdate != 0)
+					//{
+					//	CString err(mysql_error(connCallProc));
+					//	AfxMessageBox(err);
+					//}
+				}
 			}
 			//copying circle and zone to the global variables
 			if (!StrCmpA(circle, "") && !StrCmpA(zone, ""))
@@ -422,7 +523,8 @@ BOOL CSpiceOBDDlg::GetDBData()
 					break;
 				}
 			}//End While
-			 //update campaign status while its in execution
+
+			 //update campaign status while it is in execution
 			/*int query_state;
 			char queryStr[256];
 			sprintf_s(queryStr, "update tbl_campaign_master set execution_status=1,campaign_status=2 where campaign_id='%s' and execution_status=0", Campaigns.at(i).campaign_id);
@@ -441,15 +543,17 @@ BOOL CSpiceOBDDlg::GetDBData()
 	catch (CException* ex)
 	{
 		CRuntimeClass* curClass = ex->GetRuntimeClass();
-		CString Cstr(curClass->m_lpszClassName);
+		/*CString Cstr(curClass->m_lpszClassName);
 		Cstr.Append(L" Exception found of type");
-		AfxMessageBox(Cstr);
-		PostQuitMessage(0);
+		*/
+		logger.log(LOGERR, "Exception found of type in class: %s", ex->GetRuntimeClass());
+		//PostQuitMessage(0);
 	}
 	catch (...)
 	{
-		AfxMessageBox(L"Unhandled Exception occured in GetDBData()");
-		PostQuitMessage(0);
+		logger.log(LOGERR, "Unhandled Exception occured in GetDBData()");
+		//AfxMessageBox(L"");
+		//PostQuitMessage(0);
 	}
 	return true;
 }
@@ -668,7 +772,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 			}
 		}
 	}
-	//check if no mmore number to be dialed and all channels are free for specific campaign
+	////check if no more number to be dialed and all channels are free for specific campaign
 	//if (!Campaigns.at(tmpCmpId).isCampaignCompleted && Campaigns.at(tmpCmpId).phnumBuf.empty() && isCampaignChannelsCleared(tmpCmpId))
 	//{
 	//	Campaigns.at(tmpCmpId).isCampaignCompleted = true;
@@ -681,10 +785,10 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	//		CString err(mysql_error(conn));
 	//		AfxMessageBox(err);
 	//	}
-	//	if (mysql_affected_rows(conn) >= 1)
+	//	/*if (mysql_affected_rows(conn) >= 1)
 	//	{
 	//		logger.log(LOGINFO, "Campaign : '%s' completed !!!", Campaigns.at(tmpCmpId).campaign_id);
-	//	}
+	//	}*/
 	//}
 /*}
 }*/
@@ -937,6 +1041,10 @@ BOOL CSpiceOBDDlg::UpdateReasonInDialerBase(int ch)
 //checks if all channels are cleared (dialled call are finished) for the perticular campaign
 BOOL CSpiceOBDDlg::isCampaignChannelsCleared(int campaignKey)
 {
+	if (Campaigns.at(campaignKey).channelsAllocated == 0)
+	{
+		return true;
+	}
 	for (int chNo = Campaigns.at(campaignKey).minCh; chNo <= Campaigns.at(campaignKey).maxCh; chNo++)
 	{
 		if (StrCmpA(ChInfo[chNo].pPhoNumBuf, ""))
@@ -952,6 +1060,7 @@ void CSpiceOBDDlg::CloseDBConn()
 	mysql_free_result(res);
 
 	// Close a MySQL connection
+	mysql_close(connCallProc);
 	mysql_close(connBase);
 	mysql_close(connPort);
 	mysql_close(connSelect);
@@ -1134,6 +1243,10 @@ void CSpiceOBDDlg::HangupCall(int ch)
 				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 3, L"");
 				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 4, L"");
 				ChInfo[ch].IVRChannelNumber = -1;
+			}
+			if (!StrCmpA(ChInfo[ch].CDRStatus.dtmf2, ""))
+			{
+				StrCpyA(ChInfo[ch].CDRStatus.dtmf2, SsmGetDtmfStrA(ch));
 			}
 		}
 		SsmClearRxDtmfBuf(ch);
@@ -1341,10 +1454,22 @@ void CSpiceOBDDlg::DoUserWork()
 				if (!Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling && IsDailingTimeInRange)
 				{
 					StrCpyA(ChInfo[i].CDRStatus.cli, Campaigns.at(tempCampId).cliList.at(rand() % Campaigns.at(tempCampId).cliList.size()).c_str());//picking random CLI
-					StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tempCampId).phnumBuf.front().ani.c_str());
-					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tempCampId).phnumBuf.front().encryptedAni);
-
-					CString tempStr2(Campaigns.at(tempCampId).phnumBuf.front().ani.c_str()), tempStr1(ChInfo[i].CDRStatus.cli), campIdStr, campNameStr(Campaigns.at(tempCampId).campaign_name);
+					//Test call for each campaign
+					if (Campaigns.at(tempCampId).testCallflag && ++Campaigns.at(tempCampId).tmpCallCounter >= Campaigns.at(tempCampId).testCallCounter)
+					{
+						std::string DecryptedVal =  aesEncryption.DecodeAndDecrypt(Campaigns.at(tempCampId).testCallNumber);
+						StrCpyA(ChInfo[i].pPhoNumBuf, DecryptedVal.c_str());
+						StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tempCampId).testCallNumber);
+						Campaigns.at(tempCampId).tmpCallCounter = 0;
+					}
+					else
+					{
+						StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tempCampId).phnumBuf.front().ani.c_str());
+						StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tempCampId).phnumBuf.front().encryptedAni);
+						//delete Campaigns.at(tempCampId).phnumBuf.front().ani;
+						Campaigns.at(tempCampId).phnumBuf.erase(Campaigns.at(tempCampId).phnumBuf.begin());
+					}
+					CString tempStr2(ChInfo[i].pPhoNumBuf), tempStr1(ChInfo[i].CDRStatus.cli), campIdStr, campNameStr(Campaigns.at(tempCampId).campaign_name);
 					//setting caller ID 
 					if (SsmSetTxCallerId(i, ChInfo[i].CDRStatus.cli) == -1)
 					{
@@ -1373,8 +1498,6 @@ void CSpiceOBDDlg::DoUserWork()
 					{
 						m_TrkChList.SetItemText(i, 5, campIdStr);
 					}
-					//delete Campaigns.at(tempCampId).phnumBuf.front().ani;
-					Campaigns.at(tempCampId).phnumBuf.erase(Campaigns.at(tempCampId).phnumBuf.begin());
 					ChInfo[i].isAvailable = false;
 					logger.log(LOGINFO, "DoUserWork Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
 					//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
@@ -4129,7 +4252,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 
 			//get total ports and cg ports and campaign wise distribution
 			char queryStr[256];
-			sprintf_s(queryStr, "select total_ports, cgport from tbl_port_manager where zone = '%s' and circle = '%s'", zone, circle);
+			sprintf_s(queryStr, "select total_ports, cgport from tbl_port_manager where circle = '%s'", circle);
 			logger.log(LOGINFO, "Select ports query:  %s", queryStr);
 			int query_state = mysql_query(connPort, queryStr);
 
@@ -4251,7 +4374,7 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 	try
 	{
 		logger.log(LOGERR, "On Timer Start");
-		//Number should be dialled only between 8AM IST to 8:45 PM IST 
+		//Number should be dialled only between 8AM IST to 8:50 PM IST 
 		//char dateVal[25];
 		tm dateTime = logger.getTime(std::string());
 		if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 8 || dateTime.tm_hour >= 21)
