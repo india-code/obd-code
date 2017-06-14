@@ -186,9 +186,10 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	GetPrivateProfileStringA("Database", "DBName", "test_db", DBName, 255, InitDBSettings);
 	GetPrivateProfileStringA("Database", "username", "root", username, 255, InitDBSettings);
 	GetPrivateProfileStringA("Database", "password", "sdl@1234", password, 255, InitDBSettings);
+	GetPrivateProfileStringA("Database", "circle", "circle", circle, 20, InitDBSettings);
 
 	port = GetPrivateProfileIntA("Database", "Port", 3306, InitDBSettings);
-	CGMaxCHNum = GetPrivateProfileIntA("Database", "CGMaxCHNum", 30, InitDBSettings);
+	//CGMaxCHNum = GetPrivateProfileIntA("Database", "CGMaxCHNum", 30, InitDBSettings);
 	//nTotalCh = GetPrivateProfileIntA("Database", "TotalChannelsCount", 90, InitDBSettings);
 	logger.log(LOGINFO, "host: %s, username: %s, password: %s, dbname: %s, port: %d", host, username, password, DBName, port);
 	//mysql_options(conn, MYSQL_OPT_CONNECT_TIMEOUT, &connTimeOut);
@@ -352,10 +353,10 @@ BOOL CSpiceOBDDlg::GetDBData()
 		res = mysql_store_result(conn);
 
 		CampaignData tempdata;
-		int campKey = 1, channelsOccupied = CGMaxCHNum - 1;//-1;
+		int campKey = 1, channelsOccupied = -1;
 
-		StrCpyA(circle, "");
-		StrCpyA(zone, "");
+		//StrCpyA(circle, "");
+		//StrCpyA(zone, "");
 
 		while ((row = mysql_fetch_row(res)) != NULL)
 		{
@@ -391,7 +392,16 @@ BOOL CSpiceOBDDlg::GetDBData()
 					Campaigns.at(campaignKey).testCallflag = atoi(row[11]);
 
 					Campaigns.at(campaignKey).minCh = channelsOccupied + 1;
+					if (Campaigns.at(campaignKey).minCh >= nIVRMinCh && Campaigns.at(campaignKey).minCh <= nIVRMaxCh)
+					{
+						Campaigns.at(campaignKey).minCh = nIVRMaxCh + 1;
+					}
 					channelsOccupied = Campaigns.at(campaignKey).minCh + Campaigns.at(campaignKey).channelsAllocated - 1;
+					if (channelsOccupied > Campaigns.at(campaignKey).minCh && ((channelsOccupied >= nIVRMinCh && channelsOccupied <= nIVRMaxCh) ||
+						(Campaigns.at(campaignKey).minCh < nIVRMinCh && nIVRMaxCh < channelsOccupied)))
+					{
+						channelsOccupied = channelsOccupied + (nIVRMaxCh - nIVRMinCh) + 1;
+					}
 					Campaigns.at(campaignKey).maxCh = channelsOccupied;
 				}
 			}
@@ -424,9 +434,18 @@ BOOL CSpiceOBDDlg::GetDBData()
 				tempdata.tmpCallCounter = 0;
 
 				tempdata.minCh = channelsOccupied + 1;
+				if (tempdata.minCh >= nIVRMinCh && tempdata.minCh <= nIVRMaxCh)
+				{
+					tempdata.minCh = nIVRMaxCh + 1;
+				}
 				channelsOccupied = tempdata.minCh + tempdata.channelsAllocated - 1;
+				if (channelsOccupied > tempdata.minCh && ((channelsOccupied >= nIVRMinCh && channelsOccupied <= nIVRMaxCh) ||
+					(tempdata.minCh < nIVRMinCh && nIVRMaxCh < channelsOccupied)))
+				{
+					channelsOccupied = channelsOccupied + (nIVRMaxCh - nIVRMinCh) + 1;
+				}
 				tempdata.maxCh = channelsOccupied;
-
+				logger.log(LOGINFO, "Campaign Id: %s,  campaign Min ch: %d, campaign Max ch: %d", tempdata.campaign_id, tempdata.minCh, tempdata.maxCh);
 				Campaigns.insert(pair<int, CampaignData>(campKey, tempdata));
 			}
 			if ((Campaigns.at(campKey).phnumBuf.size() <= (1 * Campaigns.at(campKey).channelsAllocated)))
@@ -485,11 +504,11 @@ BOOL CSpiceOBDDlg::GetDBData()
 				}
 			}
 			//copying circle and zone to the global variables
-			if (!StrCmpA(circle, "") && !StrCmpA(zone, ""))
+			/*if (!StrCmpA(circle, "") && !StrCmpA(zone, ""))
 			{
-				StrCpyA(circle, row[5]);
+				//StrCpyA(circle, row[5]);
 				StrCpyA(zone, row[6]);
-			}
+			}*/
 			/*for (size_t i = 1; i <= Campaigns.size(); i++)
 			{*/
 			char tempPath[100];
@@ -668,68 +687,68 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	{
 		//if (SsmGetChType(i) != 2) continue;
 		switch (SsmGetChState(i)){
-			case S_CALL_STANDBY:				state = "S_CALL_STANDBY"; break;
-			case S_CALL_PICKUPED:				state = "S_CALL_PICKUPED"; break;
-			case S_CALL_RINGING:				state = "S_CALL_RINGING"; break;
-			case S_CALL_TALKING:				state = "S_CALL_TALKING"; break;
-			case S_CALL_ANALOG_WAITDIALTONE:	state = "S_CALL_ANALOG_WAITDIALTONE";	break;
-			case S_CALL_ANALOG_TXPHONUM:		state = "S_CALL_ANALOG_TXPHONUM"; break;
-			case S_CALL_ANALOG_WAITDIALRESULT:	state = "S_CALL_ANALOG_WAITDIALRESULT";		break;
-			case S_CALL_PENDING:				state = "S_CALL_PENDING"; break;
-			case S_CALL_OFFLINE:				state = "S_CALL_OFFLINE"; break;
-			case S_CALL_WAIT_REMOTE_PICKUP:		state = "S_CALL_WAIT_REMOTE_PICKUP"; break;
-			case S_CALL_ANALOG_CLEAR:			state = "S_CALL_ANALOG_CLEAR"; break;
-			case S_CALL_UNAVAILABLE:			state = "S_CALL_UNAVAILABLE"; break;
-			case S_CALL_LOCKED:					state = "S_CALL_LOCKED"; break;
-			case S_CALL_RemoteBlock:			state = "S_CALL_RemoteBlock"; break;
-			case S_CALL_LocalBlock:				state = "S_CALL_LocalBlock"; break;
-			case S_CALL_Ss1InWaitPhoNum:		state = "S_CALL_Ss1InWaitPhoNum"; break;
-			case S_CALL_Ss1InWaitFwdStop:		state = "S_CALL_Ss1InWaitFwdStop"; break;
-			case S_CALL_Ss1InWaitCallerID:		state = "S_CALL_Ss1InWaitCallerID"; break;
-			case S_CALL_Ss1InWaitKD:			state = "S_CALL_Ss1InWaitKD"; break;
-			case S_CALL_Ss1InWaitKDStop:		state = "S_CALL_Ss1InWaitKDStop"; break;
-			case S_CALL_SS1_SAYIDLE:			state = "S_CALL_SS1_SAYIDLE"; break;
-			case S_CALL_SS1WaitIdleCAS:			state = "S_CALL_SS1WaitIdleCAS"; break;
-			case S_CALL_SS1PhoNumHoldup:		state = "S_CALL_SS1PhoNumHoldup"; break;
-			case S_CALL_Ss1InWaitStopSendA3p:	state = "S_CALL_Ss1InWaitPhoNum"; break;
-			case S_CALL_Ss1OutWaitBwdAck:		state = "S_CALL_Ss1OutWaitBwdAck"; break;
-			case S_CALL_Ss1OutTxPhoNum:			state = "S_CALL_Ss1OutTxPhoNum"; break;
-			case S_CALL_Ss1OutWaitAppendPhoNum:	state = "S_CALL_Ss1OutWaitAppendPhoNum"; break;
-			case S_CALL_Ss1OutTxCallerID:		state = "S_CALL_Ss1OutTxCallerID"; break;
-			case S_CALL_Ss1OutWaitKB:			state = "S_CALL_Ss1OutWaitKB"; break;
-			case S_CALL_Ss1OutDetectA3p:		state = "S_CALL_Ss1OutDetectA3p"; break;
-			case S_ISDN_OUT_WAIT_NET_RESPONSE:	state = "S_ISDN_OUT_WAIT_NET_RESPONSE"; break;
-			case S_ISDN_OUT_PLS_APPEND_NO:		state = "S_ISDN_OUT_PLS_APPEND_NO"; break;
-			case S_ISDN_IN_CHK_CALL_IN:			state = "S_ISDN_IN_CHK_CALL_IN"; break;
-			case S_ISDN_IN_RCVING_NO:			state = "S_ISDN_IN_RCVING_NO"; break;
-			case S_ISDN_IN_WAIT_TALK:			state = "S_ISDN_IN_WAIT_TALK"; break;
-			case S_ISDN_OUT_WAIT_ALERT:			state = "S_ISDN_OUT_WAIT_ALERT"; break;
-			case S_ISDN_CALL_BEGIN:				state = "S_ISDN_CALL_BEGIN"; break;
-			case S_ISDN_WAIT_HUANGUP:			state = "S_ISDN_WAIT_HUANGUP"; break;
-			case S_ISDN_IN_CALL_PROCEEDING:		state = "S_ISDN_IN_CALL_PROCEEDING"; break;
-			case S_CALL_SENDRING:				state = "S_CALL_SENDRING "; break;
-			case S_ISUP_WaitSAM:				state = "S_ISUP_WaitSAM"; break;
-			case S_ISUP_WaitRLC:				state = "S_ISUP_WaitRLC"; break;
-			case S_ISUP_WaitReset:				state = "S_ISUP_WaitReset"; break;
-			case S_ISUP_LocallyBlocked:			state = "S_ISUP_LocallyBlocked"; break;
-			case S_ISUP_RemotelyBlocked:        state = "S_ISUP_RemotelyBlocked"; break;
-			case S_ISUP_WaitDialAnswer:			state = "S_ISUP_WaitDialAnswer"; break;
-			case S_ISUP_WaitINF:				state = "S_ISUP_WaitINF"; break;
-			case S_ISUP_WaitSetCallerID:		state = "S_ISUP_WaitSetCallerID"; break;
-			case S_DTRC_ACTIVE:					state = "S_DTRC_ACTIVE"; break;
-			case S_ISUP_Suspend:				state = "S_ISUP_Suspend"; break;
-			case S_CALL_DISCONECT:				state = "S_CALL_DISCONECT"; break;
-			case S_CALL_SS1WaitFlashEnd:		state = "S_CALL_SS1WaitFlashEnd"; break;
-			case S_CALL_FlashEnd:				state = "S_CALL_FlashEnd"; break;
-			case S_CALL_SIGNAL_ERROR:			state = "S_CALL_SIGNAL_ERROR"; break;
-			case S_CALL_FRAME_ERROR:			state = "S_CALL_FRAME_ERROR"; break;
-			case S_IP_MEDIA_LOCK:				state = "S_IP_MEDIA_LOCK"; break;
-			case S_IP_MEDIA_OPEN:				state = "S_IP_MEDIA_OPEN"; break;
-			case S_SPY_RBSWAITACK:				state = "S_SPY_RBSWAITACK"; break;
-			case S_SPY_RBSSENDACK:				state = "S_SPY_RBSSENDACK"; break;
-			case S_IPR_USING:					state = "S_IPR_USING"; break;
-			case S_IPR_COMMUNICATING:			state = "S_IPR_COMMUNICATING"; break;
-			case S_ISUP_WaitCOT:				state = "S_ISUP_WaitCOT"; break;
+		case S_CALL_STANDBY:				state = "S_CALL_STANDBY"; break;
+		case S_CALL_PICKUPED:				state = "S_CALL_PICKUPED"; break;
+		case S_CALL_RINGING:				state = "S_CALL_RINGING"; break;
+		case S_CALL_TALKING:				state = "S_CALL_TALKING"; break;
+		case S_CALL_ANALOG_WAITDIALTONE:	state = "S_CALL_ANALOG_WAITDIALTONE";	break;
+		case S_CALL_ANALOG_TXPHONUM:		state = "S_CALL_ANALOG_TXPHONUM"; break;
+		case S_CALL_ANALOG_WAITDIALRESULT:	state = "S_CALL_ANALOG_WAITDIALRESULT";		break;
+		case S_CALL_PENDING:				state = "S_CALL_PENDING"; break;
+		case S_CALL_OFFLINE:				state = "S_CALL_OFFLINE"; break;
+		case S_CALL_WAIT_REMOTE_PICKUP:		state = "S_CALL_WAIT_REMOTE_PICKUP"; break;
+		case S_CALL_ANALOG_CLEAR:			state = "S_CALL_ANALOG_CLEAR"; break;
+		case S_CALL_UNAVAILABLE:			state = "S_CALL_UNAVAILABLE"; break;
+		case S_CALL_LOCKED:					state = "S_CALL_LOCKED"; break;
+		case S_CALL_RemoteBlock:			state = "S_CALL_RemoteBlock"; break;
+		case S_CALL_LocalBlock:				state = "S_CALL_LocalBlock"; break;
+		case S_CALL_Ss1InWaitPhoNum:		state = "S_CALL_Ss1InWaitPhoNum"; break;
+		case S_CALL_Ss1InWaitFwdStop:		state = "S_CALL_Ss1InWaitFwdStop"; break;
+		case S_CALL_Ss1InWaitCallerID:		state = "S_CALL_Ss1InWaitCallerID"; break;
+		case S_CALL_Ss1InWaitKD:			state = "S_CALL_Ss1InWaitKD"; break;
+		case S_CALL_Ss1InWaitKDStop:		state = "S_CALL_Ss1InWaitKDStop"; break;
+		case S_CALL_SS1_SAYIDLE:			state = "S_CALL_SS1_SAYIDLE"; break;
+		case S_CALL_SS1WaitIdleCAS:			state = "S_CALL_SS1WaitIdleCAS"; break;
+		case S_CALL_SS1PhoNumHoldup:		state = "S_CALL_SS1PhoNumHoldup"; break;
+		case S_CALL_Ss1InWaitStopSendA3p:	state = "S_CALL_Ss1InWaitPhoNum"; break;
+		case S_CALL_Ss1OutWaitBwdAck:		state = "S_CALL_Ss1OutWaitBwdAck"; break;
+		case S_CALL_Ss1OutTxPhoNum:			state = "S_CALL_Ss1OutTxPhoNum"; break;
+		case S_CALL_Ss1OutWaitAppendPhoNum:	state = "S_CALL_Ss1OutWaitAppendPhoNum"; break;
+		case S_CALL_Ss1OutTxCallerID:		state = "S_CALL_Ss1OutTxCallerID"; break;
+		case S_CALL_Ss1OutWaitKB:			state = "S_CALL_Ss1OutWaitKB"; break;
+		case S_CALL_Ss1OutDetectA3p:		state = "S_CALL_Ss1OutDetectA3p"; break;
+		case S_ISDN_OUT_WAIT_NET_RESPONSE:	state = "S_ISDN_OUT_WAIT_NET_RESPONSE"; break;
+		case S_ISDN_OUT_PLS_APPEND_NO:		state = "S_ISDN_OUT_PLS_APPEND_NO"; break;
+		case S_ISDN_IN_CHK_CALL_IN:			state = "S_ISDN_IN_CHK_CALL_IN"; break;
+		case S_ISDN_IN_RCVING_NO:			state = "S_ISDN_IN_RCVING_NO"; break;
+		case S_ISDN_IN_WAIT_TALK:			state = "S_ISDN_IN_WAIT_TALK"; break;
+		case S_ISDN_OUT_WAIT_ALERT:			state = "S_ISDN_OUT_WAIT_ALERT"; break;
+		case S_ISDN_CALL_BEGIN:				state = "S_ISDN_CALL_BEGIN"; break;
+		case S_ISDN_WAIT_HUANGUP:			state = "S_ISDN_WAIT_HUANGUP"; break;
+		case S_ISDN_IN_CALL_PROCEEDING:		state = "S_ISDN_IN_CALL_PROCEEDING"; break;
+		case S_CALL_SENDRING:				state = "S_CALL_SENDRING "; break;
+		case S_ISUP_WaitSAM:				state = "S_ISUP_WaitSAM"; break;
+		case S_ISUP_WaitRLC:				state = "S_ISUP_WaitRLC"; break;
+		case S_ISUP_WaitReset:				state = "S_ISUP_WaitReset"; break;
+		case S_ISUP_LocallyBlocked:			state = "S_ISUP_LocallyBlocked"; break;
+		case S_ISUP_RemotelyBlocked:        state = "S_ISUP_RemotelyBlocked"; break;
+		case S_ISUP_WaitDialAnswer:			state = "S_ISUP_WaitDialAnswer"; break;
+		case S_ISUP_WaitINF:				state = "S_ISUP_WaitINF"; break;
+		case S_ISUP_WaitSetCallerID:		state = "S_ISUP_WaitSetCallerID"; break;
+		case S_DTRC_ACTIVE:					state = "S_DTRC_ACTIVE"; break;
+		case S_ISUP_Suspend:				state = "S_ISUP_Suspend"; break;
+		case S_CALL_DISCONECT:				state = "S_CALL_DISCONECT"; break;
+		case S_CALL_SS1WaitFlashEnd:		state = "S_CALL_SS1WaitFlashEnd"; break;
+		case S_CALL_FlashEnd:				state = "S_CALL_FlashEnd"; break;
+		case S_CALL_SIGNAL_ERROR:			state = "S_CALL_SIGNAL_ERROR"; break;
+		case S_CALL_FRAME_ERROR:			state = "S_CALL_FRAME_ERROR"; break;
+		case S_IP_MEDIA_LOCK:				state = "S_IP_MEDIA_LOCK"; break;
+		case S_IP_MEDIA_OPEN:				state = "S_IP_MEDIA_OPEN"; break;
+		case S_SPY_RBSWAITACK:				state = "S_SPY_RBSWAITACK"; break;
+		case S_SPY_RBSSENDACK:				state = "S_SPY_RBSSENDACK"; break;
+		case S_IPR_USING:					state = "S_IPR_USING"; break;
+		case S_IPR_COMMUNICATING:			state = "S_IPR_COMMUNICATING"; break;
+		case S_ISUP_WaitCOT:				state = "S_ISUP_WaitCOT"; break;
 		}
 
 		m_TrkChList.GetItemText(nIndex, 6, tmpstr, 50);
@@ -746,8 +765,8 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	{
 		UpdateStatusAndPickNextRecords();
 	}
-	char queryStr[256];
-	int query_state;
+//	char queryStr[256];
+//	int query_state;
 	////Loop to pick next records for all campaigns.
 	//for (size_t tmpCmpId = 1; tmpCmpId <= Campaigns.size(); tmpCmpId++)
 	//{
@@ -760,16 +779,18 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	{
 		for (int ch = 0; ch < nTotalCh; ch++)
 		{
-			for (size_t j = 1; j <= Campaigns.size(); j++)
+			if (ChInfo[ch].isAvailable && !ChInfo[ch].isIVRChannel)
 			{
-				if (ch >= Campaigns.at(j).minCh && ch <= Campaigns.at(j).maxCh)
+				ChInfo[ch].CampaignID = -1;
+				for (size_t j = 1; j <= Campaigns.size(); j++)
 				{
-					if (ChInfo[ch].isAvailable)
+					if (ch >= Campaigns.at(j).minCh && ch <= Campaigns.at(j).maxCh)
 					{
 						ChInfo[ch].CampaignID = j;
 					}
 				}
 			}
+			//logger.log(LOGINFO, "changed ch no: %d, campaign Id: %d", ch, ChInfo[ch].CampaignID);
 		}
 	}
 	////check if no more number to be dialed and all channels are free for specific campaign
@@ -854,7 +875,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			ChInfo[i].CDRStatus.channel = i;
 			StrCpyA(ChInfo[i].CDRStatus.ani, ChInfo[i].pPhoNumBuf);
 			char dateVal[25], timeVal[15], call_time[20], answer_time[20], end_time[20];
-			tm ct, at, et;  
+			tm ct, at, et;
 			tm dateTime = logger.getTime(std::string());
 			sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
 			sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
@@ -897,13 +918,13 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 				StrCpyA(ChInfo[i].CDRStatus.DNISBuf, ChInfo[i].CDRStatus.DNIS);
 			}
 
-			outfile << Campaigns.at(tmpCmpId).campaign_name << "#" << systemIpAddr<< "#" << ChInfo[i].CDRStatus.ani << timeVal 
-				<<"#" << ChInfo[i].CDRStatus.channel<<"#"<<"" <<"#" << Campaigns.at(tmpCmpId).campaign_id << "#"<< "Idea_" << circle 
-				<< "#" << dateVal << "#" << ChInfo[i].CDRStatus.ani << "#"<< ChInfo[i].CDRStatus.cli << "#" 
+			outfile << Campaigns.at(tmpCmpId).campaign_name << "#" << systemIpAddr << "#" << ChInfo[i].CDRStatus.ani << timeVal
+				<< "#" << ChInfo[i].CDRStatus.channel << "#" << "" << "#" << Campaigns.at(tmpCmpId).campaign_id << "#" << "Idea_" << circle
+				<< "#" << dateVal << "#" << ChInfo[i].CDRStatus.ani << "#" << ChInfo[i].CDRStatus.cli << "#"
 				<< call_time << "#" << answer_time << "#" << end_time << "#" << ChInfo[i].CDRStatus.callPatch_duration
-				<< "#" << ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.total_duration << "#" << ChInfo[i].CDRStatus.reason_code 
-				<< "#" << ChInfo[i].CDRStatus.reason << "#" << ""<< "#" << ChInfo[i].CDRStatus.encrypted_ani << "#"<< ChInfo[i].CDRStatus.dtmfBuf <<"#" << "" <<"#"
-				<< ChInfo[i].CDRStatus.status << "#" << ChInfo[i].CDRStatus.songName <<"#"<< ChInfo[i].CDRStatus.DNISBuf << "#" << endl;
+				<< "#" << ChInfo[i].CDRStatus.answer_duration << "#" << ChInfo[i].CDRStatus.total_duration << "#" << ChInfo[i].CDRStatus.reason_code
+				<< "#" << ChInfo[i].CDRStatus.reason << "#" << "" << "#" << ChInfo[i].CDRStatus.encrypted_ani << "#" << ChInfo[i].CDRStatus.dtmfBuf << "#" << "" << "#"
+				<< ChInfo[i].CDRStatus.status << "#" << ChInfo[i].CDRStatus.songName << "#" << ChInfo[i].CDRStatus.DNISBuf << "#" << endl;
 
 			//Check if CDR file is greater than 10 MB make a new one.
 		/*	if (outfile.tellp() >= 100)
@@ -911,7 +932,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 				outfile.close();
 				openCDRLogFile();
 			}*/
-			
+
 			if (!UpdateReasonInDialerBase(i))
 			{
 				logger.log(LOGINFO, "Reason not updated...ph number: %s, encrypted ani: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani);
@@ -979,7 +1000,7 @@ BOOL CSpiceOBDDlg::UpdatePhNumbersStatus(int ch)
 	else
 	{
 		sprintf_s(queryStr, "update tbl_outdialer_base set status = 1 where ani = '%s'",
-			 ChInfo[ch].CDRStatus.encrypted_ani);
+			ChInfo[ch].CDRStatus.encrypted_ani);
 		//logger.log(LOGINFO, "update query for phone number: %s, Encrypted Ani: %s, Channel Num:%d", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.encrypted_ani, ch);
 		int query_state = mysql_query(connUpdate, queryStr);
 
@@ -1057,16 +1078,43 @@ BOOL CSpiceOBDDlg::isCampaignChannelsCleared(int campaignKey)
 
 void CSpiceOBDDlg::CloseDBConn()
 {
-	mysql_free_result(res);
-
 	// Close a MySQL connection
-	mysql_close(connCallProc);
-	mysql_close(connBase);
-	mysql_close(connPort);
-	mysql_close(connSelect);
-	mysql_close(connInsert);
-	mysql_close(connUpdate);
-	mysql_close(conn);
+	mysql_free_result(res);
+	if (conn != NULL)
+	{
+		mysql_close(conn);
+		conn = NULL;
+	}
+	if (connCallProc != NULL)
+	{
+		mysql_close(connCallProc);
+		connCallProc = NULL;
+	}
+	if (connBase != NULL)
+	{
+		mysql_close(connBase);
+		connBase = NULL;
+	}
+	if (connSelect != NULL)
+	{
+		mysql_close(connSelect);
+		connSelect = NULL;
+	}
+	if (connInsert != NULL)
+	{
+		mysql_close(connInsert);
+		connInsert = NULL;
+	}
+	if (connUpdate != NULL)
+	{
+		mysql_close(connUpdate);
+		connUpdate = NULL;
+	}
+	if (connPort != NULL)
+	{
+		mysql_close(connPort);
+		connPort = NULL;
+	}
 }
 
 
@@ -1182,11 +1230,11 @@ HCURSOR CSpiceOBDDlg::OnQueryDragIcon()
 int CSpiceOBDDlg::GetAnIdleChannel() // Find an idle trunk channel for IVR call Patchup
 {
 	int i;
-	for (i = tempIVRMinCh; i < nIVRMaxCh; i++)
+	for (i = tempIVRMinCh; i <= nIVRMaxCh; i++)
 	{
 		if (SsmGetChState(i) == S_CALL_STANDBY)
 		{
-			if (tempIVRMinCh < nIVRMaxCh - 3)
+			if (tempIVRMinCh < nIVRMaxCh - 1)
 			{
 				tempIVRMinCh++;
 			}
@@ -1267,13 +1315,13 @@ void CSpiceOBDDlg::HangupCall(int ch)
 
 void CSpiceOBDDlg::HangupIVRCall(int ch)
 {
-	if(ch >= 0){
+	if (ch >= 0) {
 		char errReason[100];
 		int code = SsmHangup(ch); SsmGetLastErrMsg(errReason);
 		//Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
-		logger.log(LOGINFO, "Return code for SsmHangup(%d) = %d reason = %s", ch, code, errReason); 
+		logger.log(LOGINFO, "Return code for SsmHangup(%d) = %d reason = %s", ch, code, errReason);
 		//Added by sandeep rajan - 24th May, 2017 to clear the CG ANI and BNI columns after call completes on CG channels.
-		try{
+		try {
 			m_TrkChList.SetItemText(ch, 1, L"");
 			m_TrkChList.SetItemText(ch, 3, L"");
 			m_TrkChList.SetItemText(ch, 4, L"");
@@ -1282,7 +1330,8 @@ void CSpiceOBDDlg::HangupIVRCall(int ch)
 			logger.log(LOGERR, "Error in clearing the columns of the outgoing channel %d", ch);
 		}
 		ChInfo[ch].InUse = false;
-	} else logger.log(LOGERR, "Got invalid channel %d for HangupIVRCall", ch);
+	}
+	else logger.log(LOGERR, "Got invalid channel %d for HangupIVRCall", ch);
 }
 
 char* CSpiceOBDDlg::GetReleaseErrorReason(WORD errorCode)
@@ -1384,7 +1433,7 @@ UINT CSpiceOBDDlg::SetChannelsStateCount(LPVOID  chCount)
 			int chState = SsmGetChState(i);
 			if (chState == S_CALL_TALKING)
 			{
-				if (i < chnlCount->nIVRMaxCh)
+				if (i >= chnlCount->nIVRMinCh && i <= chnlCount->nIVRMaxCh)
 				{
 					callsPatchedUp++;
 				}
@@ -1402,13 +1451,13 @@ UINT CSpiceOBDDlg::SetChannelsStateCount(LPVOID  chCount)
 				channelsDown++;
 			}
 		}
-		
+
 		DailStr.Format(_T("%d"), callsDialling);
 		dailingValCtrl.SetWindowTextW(DailStr);
 
 		ConnStr.Format(_T("%d"), callsConnected);
 		connctedValCtrl.SetWindowTextW(ConnStr);
-		
+
 		CgStr.Format(_T("%d"), callsPatchedUp);
 		cgValCtrl.SetWindowTextW(CgStr);
 
@@ -1433,7 +1482,6 @@ void CSpiceOBDDlg::DoUserWork()
 
 		if (nResult == -1 || nDirection < 1) continue;
 		tempCampId = ChInfo[i].CampaignID;
-		if (tempCampId == -1) continue;
 		if (ChInfo[i].isIVRChannel)
 		{
 			if (SsmGetChState(i) == S_CALL_PENDING) {
@@ -1451,13 +1499,13 @@ void CSpiceOBDDlg::DoUserWork()
 			if (ChInfo[i].lineState == S_CALL_STANDBY && ChInfo[i].EnCalled == false)
 			{
 				//Copy phone Numbers to auto dial
-				if (!Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling && IsDailingTimeInRange)
+				if (tempCampId != -1 && !Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling && IsDailingTimeInRange)
 				{
 					StrCpyA(ChInfo[i].CDRStatus.cli, Campaigns.at(tempCampId).cliList.at(rand() % Campaigns.at(tempCampId).cliList.size()).c_str());//picking random CLI
 					//Test call for each campaign
 					if (Campaigns.at(tempCampId).testCallflag && ++Campaigns.at(tempCampId).tmpCallCounter >= Campaigns.at(tempCampId).testCallCounter)
 					{
-						std::string DecryptedVal =  aesEncryption.DecodeAndDecrypt(Campaigns.at(tempCampId).testCallNumber);
+						std::string DecryptedVal = aesEncryption.DecodeAndDecrypt(Campaigns.at(tempCampId).testCallNumber);
 						StrCpyA(ChInfo[i].pPhoNumBuf, DecryptedVal.c_str());
 						StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tempCampId).testCallNumber);
 						Campaigns.at(tempCampId).tmpCallCounter = 0;
@@ -1514,7 +1562,6 @@ void CSpiceOBDDlg::DoUserWork()
 					m_TrkChList.SetItemText(i, 3, L"");
 					m_TrkChList.SetItemText(i, 4, L"");
 					m_TrkChList.SetItemText(i, 5, L"");
-
 				}
 				if (StrCmpA(ChInfo[i].pPhoNumBuf, "") == 0) continue;
 				//SsmClearRxDtmfBuf(i);
@@ -2359,14 +2406,14 @@ void CSpiceOBDDlg::DoUserWork()
 							WORD wTimeOut = pnTime / 1000 + 5;
 							SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
 						}
-						
+
 						char dateVal[25], timeVal[15];
-					
+
 						tm dateTime = logger.getTime(std::string());
 						sprintf_s(dateVal, "%04d%02d%02d", dateTime.tm_year + 1900, dateTime.tm_mon + 1, dateTime.tm_mday);
 						sprintf_s(timeVal, "%02d%02d%02d", dateTime.tm_hour, dateTime.tm_min, dateTime.tm_sec);
 						ConsentFile << circle << "#" << systemIpAddr << "#" << dateVal << "#" << timeVal << "#" << ChInfo[i].CDRStatus.cli << "#" << ChInfo[i].pPhoNumBuf
-							<< "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#" << ChInfo[i].CDRStatus.DNIS<< "#" << Campaigns.at(tempCampId).campaign_id << "#" << endl;
+							<< "#" << ChInfo[i].CDRStatus.dtmf << "#" << ChInfo[i].CDRStatus.dtmf2 << "#" << ChInfo[i].CDRStatus.DNIS << "#" << Campaigns.at(tempCampId).campaign_id << "#" << endl;
 						//SsmClearRxDtmfBuf(i);
 						//logger.log(LOGINFO, "call patchup Disconnected..");
 					}
@@ -2493,7 +2540,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									
+
 									StrCpyA(patchDNIS, row[3]);
 								}
 								//mysql_free_result(res);
@@ -2633,7 +2680,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									
+
 									StrCpyA(patchDNIS, row[3]);
 								}
 								//mysql_free_result(res);
@@ -2795,7 +2842,7 @@ void CSpiceOBDDlg::DoUserWork()
 					break;
 				case 5:
 					StrCpyA(ChInfo[i].CDRStatus.dtmf2, SsmGetDtmfStrA(i));
-					if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING || 
+					if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING ||
 						!SsmGetHookState(i) || !SsmGetHookState(ChInfo[i].IVRChannelNumber))
 					{
 						SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
@@ -2882,7 +2929,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									
+
 									StrCpyA(patchDNIS, row[3]);
 								}
 								//mysql_free_result(res);
@@ -3024,7 +3071,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									
+
 									StrCpyA(patchDNIS, row[3]);
 								}
 								//mysql_free_result(res);
@@ -3166,7 +3213,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									
+
 									StrCpyA(patchDNIS, row[3]);
 								}
 								//mysql_free_result(res);
@@ -3425,7 +3472,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									
+
 									StrCpyA(patchDNIS, row[3]);
 								}
 								//mysql_free_result(res);
@@ -3567,7 +3614,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									
+
 									StrCpyA(patchDNIS, row[3]);
 								}
 								//mysql_free_result(res);
@@ -3709,7 +3756,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										StrCpyA(songCode, row[1]);
 									}
-									
+
 									StrCpyA(patchDNIS, row[3]);
 								}
 								//mysql_free_result(res);
@@ -4241,6 +4288,45 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 {
 	try {
 		//ReadNumbersFromFiles();
+
+		//get total ports and cg ports and campaign wise distribution
+		char queryStr[256];
+		sprintf_s(queryStr, "select total_ports, cgport from tbl_port_manager where circle = '%s'", circle);
+		logger.log(LOGINFO, "Select ports query:  %s", queryStr);
+		int query_state = mysql_query(connPort, queryStr);
+
+		if (query_state != 0)
+		{
+			CString err(mysql_error(connPort));
+			AfxMessageBox(err);
+		}
+
+		MYSQL_RES * resPort = mysql_store_result(connPort);
+		MYSQL_ROW rowPort;
+		while ((rowPort = mysql_fetch_row(resPort)) != NULL)
+		{
+			int totalch = atoi(rowPort[0]);
+			std::string cgports = rowPort[1];
+			//Extracting cg channels range from cgport column
+			nIVRMinCh = atoi(cgports.substr(0, cgports.find("-")).c_str());
+			nIVRMaxCh = atoi(cgports.substr(cgports.find("-") + 1, cgports.length() - 1).c_str());
+
+			nTotalCh = totalch + (nIVRMaxCh - nIVRMinCh) + 1;
+			int totalChannelsAvailable = SsmGetMaxCh(); //maximum channels available. 
+
+			if (nTotalCh > totalChannelsAvailable)
+			{
+				nTotalCh = totalChannelsAvailable;
+				CString cStr;
+				cStr.Format(_T("Total number of ports available on the card are: %d, please reset the port numbers in DB Accordingly !"), totalChannelsAvailable);
+				AfxMessageBox(cStr);
+			}
+			//nIVRMinCh = 0;//totalch;
+			//nIVRMaxCh = CGMaxCHNum - 1;//nTotalCh;
+		}
+		mysql_free_result(resPort);
+		logger.log(LOGINFO, "total Ports: %d, nIVRMinCh: %d, nIVRMaxCh: %d", nTotalCh, nIVRMinCh, nIVRMaxCh);
+
 		if (GetDBData() == TRUE)
 		{
 			//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
@@ -4249,33 +4335,6 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			IsDailingTimeInRange = true;
 			openCDRLogFile();
 			openConsentLogFile();
-
-			//get total ports and cg ports and campaign wise distribution
-			char queryStr[256];
-			sprintf_s(queryStr, "select total_ports, cgport from tbl_port_manager where circle = '%s'", circle);
-			logger.log(LOGINFO, "Select ports query:  %s", queryStr);
-			int query_state = mysql_query(connPort, queryStr);
-
-			if (query_state != 0)
-			{
-				CString err(mysql_error(connPort));
-				AfxMessageBox(err);
-			}
-
-			MYSQL_RES * resPort = mysql_store_result(connPort);
-			MYSQL_ROW rowPort;
-			while ((rowPort = mysql_fetch_row(resPort)) != NULL)
-			{
-				int totalch = atoi(rowPort[0]);
-				int cgports = atoi(rowPort[1]);
-				nTotalCh = totalch + cgports;
-				nIVRMinCh = 0;//totalch;
-				nIVRMaxCh = CGMaxCHNum - 1;//nTotalCh;
-			}
-			mysql_free_result(resPort);
-			logger.log(LOGINFO, "total Ports: %d, minIvrCh: %d", nTotalCh, nIVRMinCh);
-
-
 
 			//Initialization of channels on trunk-board
 			ChInfo = new CH_INFO[nTotalCh];
@@ -4315,10 +4374,14 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 					StrCpyA(ChInfo[i].CDRStatus.secondConsent, "");
 					StrCpyA(ChInfo[i].CDRStatus.songName, "");
 					StrCpyA(ChInfo[i].CDRStatus.DNIS, "");
-					if (i >= nIVRMinCh && i < nIVRMaxCh)
+					StrCpyA(ChInfo[i].CDRStatus.reason, "");
+					StrCpyA(ChInfo[i].CDRStatus.status, "");
+					StrCpyA(ChInfo[i].CDRStatus.reason_code, "");
+					if (i >= nIVRMinCh && i <= nIVRMaxCh)
 					{
 						ChInfo[i].isIVRChannel = true;
 						ChInfo[i].InUse = false;
+						continue;
 					}
 					for (size_t j = 1; j <= Campaigns.size(); j++)
 					{
@@ -4327,29 +4390,28 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 							ChInfo[i].CampaignID = j;
 							/*if (!Campaigns.at(j).phnumBuf.empty())
 							{
-								StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(j).phnumBuf.front().ani);
-								StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(j).phnumBuf.front().encryptedAni);
-								Campaigns.at(j).phnumBuf.erase(Campaigns.at(j).phnumBuf.begin());
-								logger.log(LOGINFO, "InitilizeChannels Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
-								if (!UpdatePhNumbersStatus(i))
-								{
-									logger.log(LOGINFO, "InitilizeChannels Row not updated... channel number: %d", i);
-								}
+							StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(j).phnumBuf.front().ani);
+							StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(j).phnumBuf.front().encryptedAni);
+							Campaigns.at(j).phnumBuf.erase(Campaigns.at(j).phnumBuf.begin());
+							logger.log(LOGINFO, "InitilizeChannels Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
+							if (!UpdatePhNumbersStatus(i))
+							{
+							logger.log(LOGINFO, "InitilizeChannels Row not updated... channel number: %d", i);
+							}
 							}*/
 							//setting caller ID 
 							/*if (SsmSetTxCallerId(i, Campaigns.at(j).CLI) == -1)
 							{
-								getErrorResult(L" SsmSetTxCallerId");
-								return false;
+							getErrorResult(L" SsmSetTxCallerId");
+							return false;
 							}*/
 						}
 					}
-					StrCpyA(ChInfo[i].CDRStatus.reason, "");
-					StrCpyA(ChInfo[i].CDRStatus.status, "");
-					StrCpyA(ChInfo[i].CDRStatus.reason_code, "");
+					//logger.log(LOGINFO, "ch no: %d, campaign Id: %d", i, ChInfo[i].CampaignID);
 				}
 			}
-			CWinThread* bThread = AfxBeginThread(SetChannelsStateCount, new ChCount{ nTotalCh, CGMaxCHNum });
+			CWinThread* bThread = AfxBeginThread(SetChannelsStateCount, new ChCount{ nTotalCh, nIVRMinCh, nIVRMaxCh });
+
 			//Loading wav file on different positions for all campaigns
 //			char alias[10];
 			//int index = 0;
@@ -4444,6 +4506,8 @@ void CSpiceOBDDlg::OnBnClickedDiallingStart()
 	{
 		SetTimer(1000, 200, NULL);
 		IsTimerOn = true;
+		CloseDBConn();
+		InitilizeDBConnection();
 	}
 }
 

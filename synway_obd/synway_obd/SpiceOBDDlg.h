@@ -143,8 +143,8 @@ private:
 	void SetDiallingStartStopBtn(BOOL enableStart);
 public:
 	WORD	nTotalCh;
-	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh, CGMaxCHNum;
-	char circle[20], zone[20];
+	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh;//, CGMaxCHNum;
+	char circle[20]; //, zone[20];
 	CH_INFO* ChInfo;
 	CLogger logger;
 	//BOOL isReloadConfiguration;
@@ -162,6 +162,7 @@ public:
 	struct ChCount
 	{
 		int nTotalCh;
+		int nIVRMinCh;
 		int nIVRMaxCh;
 	};
 	static UINT SetChannelsStateCount(LPVOID  chCount);
