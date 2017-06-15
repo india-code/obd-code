@@ -1875,7 +1875,7 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
+								char songQuery[1024], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState, jumpLevel;
 
 								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, jump_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
@@ -2022,7 +2022,7 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
+								char songQuery[1024], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState, jumpLevel;
 
 								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, jump_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
@@ -2170,7 +2170,7 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								//Get song details
-								char songQuery[256], songName[50], songCode[10], levelType[10], patchDNIS[31];
+								char songQuery[1024], songName[50], songCode[10], levelType[10], patchDNIS[31];
 								int queryState, jumpLevel;
 
 								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s'), jump_level as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 3",
@@ -2375,7 +2375,7 @@ void CSpiceOBDDlg::DoUserWork()
 				case 5:
 					StrCpyA(ChInfo[i].CDRStatus.dtmf2, SsmGetDtmfStrA(i));
 					SsmClearRxDtmfBuf(i);
-					if (SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING && ChInfo[i].levelNumber != -1)
+					if ((SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_STANDBY) && ChInfo[i].levelNumber != -1)
 					{
 						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.dtmf);
 						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, "|");
@@ -2417,7 +2417,7 @@ void CSpiceOBDDlg::DoUserWork()
 						//SsmClearRxDtmfBuf(i);
 						//logger.log(LOGINFO, "call patchup Disconnected..");
 					}
-					else if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING)
+					else if (SsmGetChState(i) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_PENDING || SsmGetChState(ChInfo[i].IVRChannelNumber) == S_CALL_STANDBY)
 					{
 						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.dtmf);
 						StrCatA(ChInfo[i].CDRStatus.dtmfBuf, "|");
