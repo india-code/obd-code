@@ -256,12 +256,12 @@ void CSpiceOBDDlg::SetChannelInitialStatus()
 		/*int tempCampId = ChInfo[i].CampaignID;
 		if (tempCampId != -1)
 		{
-			CString tempStr1(ChInfo[i].pPhoNumBuf), tempStr2(Campaigns.at(tempCampId).CLI), campIdStr;
-			campIdStr.Format(_T("%d"), tempCampId);
+		CString tempStr1(ChInfo[i].pPhoNumBuf), tempStr2(Campaigns.at(tempCampId).CLI), campIdStr;
+		campIdStr.Format(_T("%d"), tempCampId);
 
-			m_TrkChList.SetItemText(i, 3, tempStr2);
-			m_TrkChList.SetItemText(i, 4, tempStr1);
-			m_TrkChList.SetItemText(nItem, 5, campIdStr);
+		m_TrkChList.SetItemText(i, 3, tempStr2);
+		m_TrkChList.SetItemText(i, 4, tempStr1);
+		m_TrkChList.SetItemText(nItem, 5, campIdStr);
 		}*/
 		/*CString chStateNum;
 		chStateNum.Format(L"%d", SsmGetChState(i));
@@ -275,55 +275,65 @@ void CSpiceOBDDlg::CallProcedure(std::string & campaign_id)
 	MYSQL_BIND bind[1];
 	MYSQL_STMT *stmt;
 	DWORD str_length;
-	char str_data[50];
+	char str_data[80];
 
-	char PROC_SAMPLE[] = "CALL procDeallocateChannel(?)";
-
-	logger.log(LOGINFO, "CallProcedure function start campaign_id : %s", campaign_id.c_str());
-	stmt = mysql_stmt_init(connCallProc);
-	if (!stmt)
+	char PROC_SAMPLE[1024];
+	
+	try
 	{
-		logger.log(LOGERR, " mysql_stmt_init(), out of memory");
+		StrCpyA(PROC_SAMPLE, "CALL procDeallocateChannel(?)");
+
+		logger.log(LOGINFO, "CallProcedure function start campaign_id : %s", campaign_id.c_str());
+		stmt = mysql_stmt_init(connCallProc);
+		if (!stmt)
+		{
+			logger.log(LOGERR, " mysql_stmt_init(), out of memory");
+		}
+		if (mysql_stmt_prepare(stmt, PROC_SAMPLE, strlen(PROC_SAMPLE)))
+		{
+			logger.log(LOGERR, " mysql_stmt_prepare(), procedure failed");
+			logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+		}
+		int param_count = mysql_stmt_param_count(stmt);
+
+		if (param_count != 1) /* validate parameter count */
+		{
+			logger.log(LOGERR, " invalid parameter count returned by MySQL");
+		}
+
+		memset(bind, 0, sizeof(bind));
+
+		/* STRING PARAM */
+		/* This is a number type, so there is no need
+		to specify buffer_length */
+		bind[0].buffer_type = MYSQL_TYPE_STRING;
+		bind[0].buffer = (char*)str_data;
+		bind[0].buffer_length = 1024;
+		bind[0].is_null = 0;
+		bind[0].length = &str_length;
+
+		if (mysql_stmt_bind_param(stmt, bind))
+		{
+			logger.log(LOGERR, " mysql_stmt_bind_param() failed");
+			logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+		}
+
+		strncpy_s(str_data, campaign_id.c_str(), 80); /* string  */
+		str_length = strlen(str_data);
+
+
+		if (mysql_stmt_execute(stmt))
+		{
+			logger.log(LOGERR, " mysql_stmt_execute(), 1 failed");
+			logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+		}
+		mysql_stmt_close(stmt);
+		logger.log(LOGINFO, "CallProcedure function end campaign_id : %s", campaign_id.c_str());
 	}
-	if (mysql_stmt_prepare(stmt, PROC_SAMPLE, strlen(PROC_SAMPLE)))
+	catch (...)
 	{
-		logger.log(LOGERR, " mysql_stmt_prepare(), procedure failed");
-		logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+		logger.log(LOGERR, "Unhandled exception caught in call procedure...");
 	}
-	int param_count = mysql_stmt_param_count(stmt);
-
-	if (param_count != 1) /* validate parameter count */
-	{
-		logger.log(LOGERR, " invalid parameter count returned by MySQL");
-	}
-
-	memset(bind, 0, sizeof(bind));
-
-	/* STRING PARAM */
-	/* This is a number type, so there is no need
-	to specify buffer_length */
-	bind[0].buffer_type = MYSQL_TYPE_STRING;
-	bind[0].buffer = (char*)str_data;
-	bind[0].buffer_length = 1024;
-	bind[0].is_null = 0;
-	bind[0].length = &str_length;
-
-	if (mysql_stmt_bind_param(stmt, bind))
-	{
-		logger.log(LOGERR, " mysql_stmt_bind_param() failed");
-		logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
-	}
-
-	strncpy_s(str_data, campaign_id.c_str(), 50); /* string  */
-	str_length = strlen(str_data);
-
-
-	if (mysql_stmt_execute(stmt))
-	{
-		logger.log(LOGERR, " mysql_stmt_execute(), 1 failed");
-		logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
-	}
-	mysql_stmt_close(stmt);
 }
 
 
@@ -334,7 +344,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 	{
 		//call to decrypt values read from DB
 		int query_state;
-		char queryStr[512];
+		char queryStr[1024];
 
 		StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type, circle, zone, campaign_name, first_consent_digit,test_callnumber, test_callctr, test_callflag\
 			  from tbl_campaign_master where (campaign_status = 1 or campaign_status = 2) and (base_status = 1 or test_callflag = 1) and prompts_status = 1 \
@@ -465,8 +475,8 @@ BOOL CSpiceOBDDlg::GetDBData()
 				}
 				/*while (!Campaigns.at(campKey).phnumBuf.empty())
 				{
-					delete Campaigns.at(campKey).phnumBuf.front().ani;
-					Campaigns.at(campKey).phnumBuf.erase(Campaigns.at(campKey).phnumBuf.begin());
+				delete Campaigns.at(campKey).phnumBuf.front().ani;
+				Campaigns.at(campKey).phnumBuf.erase(Campaigns.at(campKey).phnumBuf.begin());
 				}*/
 				MYSQL_RES * resPhBuf = mysql_store_result(connBase);
 				MYSQL_ROW rowPhBuf;
@@ -506,8 +516,8 @@ BOOL CSpiceOBDDlg::GetDBData()
 			//copying circle and zone to the global variables
 			/*if (!StrCmpA(circle, "") && !StrCmpA(zone, ""))
 			{
-				//StrCpyA(circle, row[5]);
-				StrCpyA(zone, row[6]);
+			//StrCpyA(circle, row[5]);
+			StrCpyA(zone, row[6]);
 			}*/
 			/*for (size_t i = 1; i <= Campaigns.size(); i++)
 			{*/
@@ -544,17 +554,17 @@ BOOL CSpiceOBDDlg::GetDBData()
 			}//End While
 
 			 //update campaign status while it is in execution
-			/*int query_state;
-			char queryStr[256];
-			sprintf_s(queryStr, "update tbl_campaign_master set execution_status=1,campaign_status=2 where campaign_id='%s' and execution_status=0", Campaigns.at(i).campaign_id);
-			query_state = mysql_query(conn, queryStr);
-			if (query_state != 0)
-			{
-				CString err(mysql_error(conn));
-				AfxMessageBox(err);
-			}*/
+			 /*int query_state;
+			 char queryStr[256];
+			 sprintf_s(queryStr, "update tbl_campaign_master set execution_status=1,campaign_status=2 where campaign_id='%s' and execution_status=0", Campaigns.at(i).campaign_id);
+			 query_state = mysql_query(conn, queryStr);
+			 if (query_state != 0)
+			 {
+			 CString err(mysql_error(conn));
+			 AfxMessageBox(err);
+			 }*/
 
-			//}//End For
+			 //}//End For
 			campKey++;
 		}
 		mysql_free_result(res);
@@ -686,7 +696,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	for (i = 0, nIndex = 0; i < nTotalCh; i++)
 	{
 		//if (SsmGetChType(i) != 2) continue;
-		switch (SsmGetChState(i)){
+		switch (SsmGetChState(i)) {
 		case S_CALL_STANDBY:				state = "S_CALL_STANDBY"; break;
 		case S_CALL_PICKUPED:				state = "S_CALL_PICKUPED"; break;
 		case S_CALL_RINGING:				state = "S_CALL_RINGING"; break;
@@ -765,8 +775,8 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	{
 		UpdateStatusAndPickNextRecords();
 	}
-//	char queryStr[256];
-//	int query_state;
+	//	char queryStr[256];
+	//	int query_state;
 	////Loop to pick next records for all campaigns.
 	//for (size_t tmpCmpId = 1; tmpCmpId <= Campaigns.size(); tmpCmpId++)
 	//{
@@ -811,50 +821,50 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	//		logger.log(LOGINFO, "Campaign : '%s' completed !!!", Campaigns.at(tmpCmpId).campaign_id);
 	//	}*/
 	//}
-/*}
-}*/
-//		sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
-//			Campaigns.at(tmpCmpId).campaign_id, 0, (5 * Campaigns.at(tmpCmpId).channelsAllocated));
+	/*}
+	}*/
+	//		sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
+	//			Campaigns.at(tmpCmpId).campaign_id, 0, (5 * Campaigns.at(tmpCmpId).channelsAllocated));
 
-//		query_state = mysql_query(conn, queryStr);
+	//		query_state = mysql_query(conn, queryStr);
 
-//		if (query_state != 0)
-//		{
-//			CString err(mysql_error(conn));
-//			AfxMessageBox(err);
-//		}
-//		MYSQL_RES * resPhBuf = mysql_store_result(conn);
-//		MYSQL_ROW rowPhBuf;
-//		Campaigns.at(tmpCmpId).phnumBuf.clear();
-//		while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
-//		{
-//			char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
-//			Campaigns.at(tmpCmpId).phnumBuf.push_back({ DecryptedVal, rowPhBuf[0] });
-//		}
+	//		if (query_state != 0)
+	//		{
+	//			CString err(mysql_error(conn));
+	//			AfxMessageBox(err);
+	//		}
+	//		MYSQL_RES * resPhBuf = mysql_store_result(conn);
+	//		MYSQL_ROW rowPhBuf;
+	//		Campaigns.at(tmpCmpId).phnumBuf.clear();
+	//		while ((rowPhBuf = mysql_fetch_row(resPhBuf)) != NULL)
+	//		{
+	//			char* DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
+	//			Campaigns.at(tmpCmpId).phnumBuf.push_back({ DecryptedVal, rowPhBuf[0] });
+	//		}
 	//}
 
-//	/*if (!Campaigns.at(tmpCmpId).phnumBuf.empty())
-//	{
-//	CString tempStr2(Campaigns.at(tmpCmpId).phnumBuf.front().ani);
-//	StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tmpCmpId).phnumBuf.front().ani);
-//	StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tmpCmpId).phnumBuf.front().encryptedAni);
-//	m_TrkChList.SetItemText(i, 4, tempStr2);
-//	Campaigns.at(tmpCmpId).phnumBuf.erase(Campaigns.at(tmpCmpId).phnumBuf.begin());
-//	logger.log(LOGINFO, "UpdateStatusAndPickNextRecords Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
-//	//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
-//	if (!UpdatePhNumbersStatus(i))
-//	{
-//	logger.log(LOGINFO,"UpdateStatusAndPickNextRecords Row not updated...ph number: %s, channel number: %d", ChInfo[i].pPhoNumBuf, i);
-//	}
-//	}
-//	else
-//	{
-//	StrCpyA(ChInfo[i].pPhoNumBuf, "");
-//	StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
-//	m_TrkChList.SetItemText(i, 4, L"");
-//	}*/
-//	//}
-//}
+	//	/*if (!Campaigns.at(tmpCmpId).phnumBuf.empty())
+	//	{
+	//	CString tempStr2(Campaigns.at(tmpCmpId).phnumBuf.front().ani);
+	//	StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tmpCmpId).phnumBuf.front().ani);
+	//	StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tmpCmpId).phnumBuf.front().encryptedAni);
+	//	m_TrkChList.SetItemText(i, 4, tempStr2);
+	//	Campaigns.at(tmpCmpId).phnumBuf.erase(Campaigns.at(tmpCmpId).phnumBuf.begin());
+	//	logger.log(LOGINFO, "UpdateStatusAndPickNextRecords Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
+	//	//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
+	//	if (!UpdatePhNumbersStatus(i))
+	//	{
+	//	logger.log(LOGINFO,"UpdateStatusAndPickNextRecords Row not updated...ph number: %s, channel number: %d", ChInfo[i].pPhoNumBuf, i);
+	//	}
+	//	}
+	//	else
+	//	{
+	//	StrCpyA(ChInfo[i].pPhoNumBuf, "");
+	//	StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
+	//	m_TrkChList.SetItemText(i, 4, L"");
+	//	}*/
+	//	//}
+	//}
 	logger.log(LOGERR, "UpDateATrunkChListCtrl End");
 }
 
@@ -927,10 +937,10 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 				<< ChInfo[i].CDRStatus.status << "#" << ChInfo[i].CDRStatus.songName << "#" << ChInfo[i].CDRStatus.DNISBuf << "#" << endl;
 
 			//Check if CDR file is greater than 10 MB make a new one.
-		/*	if (outfile.tellp() >= 100)
+			/*	if (outfile.tellp() >= 100)
 			{
-				outfile.close();
-				openCDRLogFile();
+			outfile.close();
+			openCDRLogFile();
 			}*/
 
 			if (!UpdateReasonInDialerBase(i))
@@ -1502,7 +1512,7 @@ void CSpiceOBDDlg::DoUserWork()
 				if (tempCampId != -1 && !Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling && IsDailingTimeInRange)
 				{
 					StrCpyA(ChInfo[i].CDRStatus.cli, Campaigns.at(tempCampId).cliList.at(rand() % Campaigns.at(tempCampId).cliList.size()).c_str());//picking random CLI
-					//Test call for each campaign
+																																					//Test call for each campaign
 					if (Campaigns.at(tempCampId).testCallflag && ++Campaigns.at(tempCampId).tmpCallCounter >= Campaigns.at(tempCampId).testCallCounter)
 					{
 						std::string DecryptedVal = aesEncryption.DecodeAndDecrypt(Campaigns.at(tempCampId).testCallNumber);
@@ -1876,13 +1886,13 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								//Get song details
 								char songQuery[1024], songName[50], songCode[10], levelType[10], patchDNIS[31];
-								int queryState, jumpLevel;
+								int queryState, jumpLevel, invalidKeyLevel;
 
-								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, jump_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level, invalid_key from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
 									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(connSelect, songQuery);
-								logger.log(LOGINFO, "Song query: %s", songQuery);
+								logger.log(LOGINFO, "Song query for input Detected: %s", songQuery);
 								if (queryState != 0)
 								{
 									CString err(mysql_error(connSelect));
@@ -1896,6 +1906,7 @@ void CSpiceOBDDlg::DoUserWork()
 								StrCpyA(levelType, "");
 								StrCpyA(patchDNIS, "");
 								jumpLevel = -1;
+								invalidKeyLevel = 1;
 								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
 									StrCpyA(songName, rowPromo[0]);
@@ -1910,6 +1921,7 @@ void CSpiceOBDDlg::DoUserWork()
 									}
 									StrCpyA(patchDNIS, rowPromo[3]);
 									jumpLevel = atoi(rowPromo[4]);
+									invalidKeyLevel = atoi(rowPromo[5]);
 								}
 								mysql_free_result(resPromo);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -1979,7 +1991,7 @@ void CSpiceOBDDlg::DoUserWork()
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 7;
-									ChInfo[i].levelNumber = 1;
+									ChInfo[i].levelNumber = invalidKeyLevel;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
 									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
 									{
@@ -1991,9 +2003,32 @@ void CSpiceOBDDlg::DoUserWork()
 							}
 							else  //No Input
 							{
+								//Fetch no input repeat level value.
+								char songQuery[1024];
+								int queryState, noKeyLevel;
+
+								sprintf_s(songQuery, "select no_key from tbl_songs_master where campaign_id = '%s' and repeat_level = 1 limit 1",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id);
+
+								queryState = mysql_query(connSelect, songQuery);
+								logger.log(LOGINFO, "Song query for No Input: %s", songQuery);
+								if (queryState != 0)
+								{
+									CString err(mysql_error(connSelect));
+									AfxMessageBox(err);
+								}
+								MYSQL_RES *resPromo = mysql_store_result(connSelect);
+								MYSQL_ROW rowPromo;
+								noKeyLevel = 2;
+								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
+								{
+									noKeyLevel = atoi(rowPromo[0]);
+								}
+								mysql_free_result(resPromo);
+
 								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 7;
-								ChInfo[i].levelNumber = 2;
+								ChInfo[i].levelNumber = noKeyLevel;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
 								{
@@ -2023,13 +2058,13 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								//Get song details
 								char songQuery[1024], songName[50], songCode[10], levelType[10], patchDNIS[31];
-								int queryState, jumpLevel;
+								int queryState, jumpLevel, invalidKeyLevel;
 
-								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, jump_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level, invalid_key from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
 									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(connSelect, songQuery);
-								logger.log(LOGINFO, "Song query: %s", songQuery);
+								logger.log(LOGINFO, "Song query for input Detected: %s", songQuery);
 								if (queryState != 0)
 								{
 									CString err(mysql_error(connSelect));
@@ -2043,6 +2078,7 @@ void CSpiceOBDDlg::DoUserWork()
 								StrCpyA(levelType, "");
 								StrCpyA(patchDNIS, "");
 								jumpLevel = -1;
+								invalidKeyLevel = 2;
 								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
 									StrCpyA(songName, rowPromo[0]);
@@ -2057,6 +2093,7 @@ void CSpiceOBDDlg::DoUserWork()
 									}
 									StrCpyA(patchDNIS, rowPromo[3]);
 									jumpLevel = atoi(rowPromo[4]);
+									invalidKeyLevel = atoi(rowPromo[5]);
 								}
 								mysql_free_result(resPromo);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -2090,7 +2127,6 @@ void CSpiceOBDDlg::DoUserWork()
 										{
 											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
-											//logger.log(LOGINFO, "patchDNIS to CIVR: %s", patchDNIS);
 											//StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
 											StrCatA(patchDNIS, Campaigns.at(tempCampId).first_consent_digit);
 										}
@@ -2127,7 +2163,7 @@ void CSpiceOBDDlg::DoUserWork()
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 7;
-									ChInfo[i].levelNumber = 2;
+									ChInfo[i].levelNumber = invalidKeyLevel;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
 									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
 									{
@@ -2139,9 +2175,32 @@ void CSpiceOBDDlg::DoUserWork()
 							}
 							else  //No Input
 							{
+								//Fetch no input repeat level value.
+								char songQuery[1024];
+								int queryState, noKeyLevel;
+
+								sprintf_s(songQuery, "select no_key from tbl_songs_master where campaign_id = '%s' and repeat_level = 2 limit 1",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id);
+
+								queryState = mysql_query(connSelect, songQuery);
+								logger.log(LOGINFO, "Song query for No Input: %s", songQuery);
+								if (queryState != 0)
+								{
+									CString err(mysql_error(connSelect));
+									AfxMessageBox(err);
+								}
+								MYSQL_RES *resPromo = mysql_store_result(connSelect);
+								MYSQL_ROW rowPromo;
+								noKeyLevel = 3;
+								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
+								{
+									noKeyLevel = atoi(rowPromo[0]);
+								}
+								mysql_free_result(resPromo);
+
 								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 7;
-								ChInfo[i].levelNumber = 2;
+								ChInfo[i].levelNumber = noKeyLevel;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
 								{
@@ -2171,13 +2230,13 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								//Get song details
 								char songQuery[1024], songName[50], songCode[10], levelType[10], patchDNIS[31];
-								int queryState, jumpLevel;
+								int queryState, jumpLevel, invalidKeyLevel;
 
-								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s'), jump_level as DNIS from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 3",
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level, invalid_key from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 3",
 									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(connSelect, songQuery);
-								logger.log(LOGINFO, "Song query: %s", songQuery);
+								logger.log(LOGINFO, "Song query for input Detected: %s", songQuery);
 								if (queryState != 0)
 								{
 									CString err(mysql_error(connSelect));
@@ -2191,6 +2250,7 @@ void CSpiceOBDDlg::DoUserWork()
 								StrCpyA(levelType, "");
 								StrCpyA(patchDNIS, "");
 								jumpLevel = -1;
+								invalidKeyLevel = 3;
 								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
 									StrCpyA(songName, rowPromo[0]);
@@ -2205,6 +2265,7 @@ void CSpiceOBDDlg::DoUserWork()
 									}
 									StrCpyA(patchDNIS, rowPromo[3]);
 									jumpLevel = atoi(rowPromo[4]);
+									invalidKeyLevel = atoi(rowPromo[5]);
 								}
 								mysql_free_result(resPromo);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -2274,7 +2335,7 @@ void CSpiceOBDDlg::DoUserWork()
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 7;
-									ChInfo[i].levelNumber = 3;
+									ChInfo[i].levelNumber = invalidKeyLevel;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
 									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
 									{
@@ -2286,16 +2347,44 @@ void CSpiceOBDDlg::DoUserWork()
 							}
 							else  //No Input
 							{
+								//Fetch no input repeat level value.
+								char songQuery[1024];
+								int queryState, noKeyLevel;
+
+								sprintf_s(songQuery, "select no_key from tbl_songs_master where campaign_id = '%s' and repeat_level = 3 limit 1",
+									Campaigns.at(ChInfo[i].CampaignID).campaign_id);
+
+								queryState = mysql_query(connSelect, songQuery);
+								logger.log(LOGINFO, "Song query for No Input: %s", songQuery);
+								if (queryState != 0)
+								{
+									CString err(mysql_error(connSelect));
+									AfxMessageBox(err);
+								}
+								MYSQL_RES *resPromo = mysql_store_result(connSelect);
+								MYSQL_ROW rowPromo;
+								noKeyLevel = 3;
+								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
+								{
+									noKeyLevel = atoi(rowPromo[0]);
+								}
+								mysql_free_result(resPromo);
+
 								SsmStopPlay(i);
 								ChInfo[i].ConsentState = 7;
-								ChInfo[i].levelNumber = 3;
+								ChInfo[i].levelNumber = noKeyLevel;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
 								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
 								}
-
+								//int pnFormat; long pnTime;
+								//if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+								//{
+								//	WORD wTimeOut = pnTime/1000 + 5;
+								//	SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
+								//}
 								//SsmSetWaitDtmfExA(i, 18000, 1, "1", true);
 							}
 						}
@@ -4413,7 +4502,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			CWinThread* bThread = AfxBeginThread(SetChannelsStateCount, new ChCount{ nTotalCh, nIVRMinCh, nIVRMaxCh });
 
 			//Loading wav file on different positions for all campaigns
-//			char alias[10];
+			//			char alias[10];
 			//int index = 0;
 		}
 	}
@@ -4506,8 +4595,8 @@ void CSpiceOBDDlg::OnBnClickedDiallingStart()
 	{
 		SetTimer(1000, 200, NULL);
 		IsTimerOn = true;
-		CloseDBConn();
-		InitilizeDBConnection();
+		/*CloseDBConn();
+		InitilizeDBConnection();*/
 	}
 }
 
