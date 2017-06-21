@@ -69,8 +69,8 @@ typedef struct
 	char context[30];
 	char encrypted_ani[100];
 	char dtmf[10];
-	char dtmf2[10];
-	char dtmfBuf[50];
+	char dtmf2[30];
+	char dtmfBuf[100];
 	char DNISBuf[100];
 	char firstConsent[50];
 	char secondConsent[50];
@@ -144,7 +144,7 @@ private:
 public:
 	WORD	nTotalCh;
 	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh;//, CGMaxCHNum;
-	char circle[20]; //, zone[20];
+	char circle[20], circleLrn[5]; //, zone[20];
 	CH_INFO* ChInfo;
 	CLogger logger;
 	//BOOL isReloadConfiguration;
@@ -171,6 +171,7 @@ public:
 	BOOL UpdatePhNumbersStatus(int ch);
 	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();
+	void GetDTMFandDNISBuffer(int ch);
 	BOOL isCampaignChannelsCleared(int campaignKey);
 	int GetAnIdleChannel();
 	BOOL InitCtiBoard();
