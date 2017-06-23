@@ -1671,6 +1671,14 @@ void CSpiceOBDDlg::DoUserWork()
 				else
 				{
 					logger.log(LOGINFO, "Call picked up channel: %d, phone number: %s", i, ChInfo[i].pPhoNumBuf);
+					
+					if (StrCmpA(circleLrn, ""))
+					{
+						std::string tempPhnBufStr = ChInfo[i].pPhoNumBuf;
+						tempPhnBufStr.erase(0, 4);
+						StrCpyA(ChInfo[i].pPhoNumBuf, tempPhnBufStr.c_str());
+					}
+
 					ChInfo[i].nStep = USER_TALKING;
 					ChInfo[i].DialPlanStatus = Campaigns.at(tempCampId).obdDialPlan;
 					if (ChInfo[i].DialPlanStatus != Informative)
