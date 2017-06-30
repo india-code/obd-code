@@ -37,12 +37,12 @@ enum OBD_DIAL_PLAN
 {
 	Informative = 1,
 	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
-										  //AcquisitionalOBDWithout1stConsent,
-										  AcquisitionalOBDWith1stConsent, /*1: welcome, 2: No input again, 3: Thanks 4: wrong*/
-										  AcquisitionalOBDWithIVRServiceCrossPromo, /*Promprs Index are as 1: 1st prompt , 2: 2nd prompts , 3: 3rd prompt, 4: idea jingle ,5: thanks , 6: wrong input, 7 : no input*/
-										  AcquisitionalOBDWith1stIVRConsentDT10, /*Promprs Index are as 1: 1st prompt , 2: thanks, 3: idea jingle, 4: wrong input, 5: no input*/
-										  AcquisitionalOBDWith1stIVRConsentDT20,/*Promprs Index are as 1: 1st prompt , 2: 2nd prompt , 3: idea jingle, 4: thanks, 5: wrong input, 6: no input  */
-										  AcquisitionalOBDWith1stIVRConsentDT30,/*Promprs Index are as 1: 1st prompt , 2: 2nd prompts , 3: 3rd prompt, 4: idea jingle ,5: thanks , 6: wrong input, 7 : no input*/
+	//AcquisitionalOBDWithout1stConsent,
+	AcquisitionalOBDWith1stConsent, /*1: welcome, 2: No input again, 3: Thanks 4: wrong*/
+	AcquisitionalOBDWithIVRServiceCrossPromo, /*Promprs Index are as 1: 1st prompt , 2: 2nd prompts , 3: 3rd prompt, 4: idea jingle ,5: thanks , 6: wrong input, 7 : no input*/
+	AcquisitionalOBDWith1stIVRConsentDT10, /*Promprs Index are as 1: 1st prompt , 2: thanks, 3: idea jingle, 4: wrong input, 5: no input*/
+	AcquisitionalOBDWith1stIVRConsentDT20,/*Promprs Index are as 1: 1st prompt , 2: 2nd prompt , 3: idea jingle, 4: thanks, 5: wrong input, 6: no input  */
+	AcquisitionalOBDWith1stIVRConsentDT30,/*Promprs Index are as 1: 1st prompt , 2: 2nd prompts , 3: 3rd prompt, 4: idea jingle ,5: thanks , 6: wrong input, 7 : no input*/
 };
 
 extern void getErrorResult(LPCTSTR  ApiName);
@@ -52,7 +52,7 @@ typedef struct
 	char call_id[20];
 	int channel;
 	char groupid[30];
-	char campaign_id[80];
+	char campaign_id[100];
 	//char circle[20];
 	char call_date[20];
 	char ani[20];
@@ -125,7 +125,7 @@ typedef struct
 	int channelsAllocated;
 	BOOL isCampaignCompleted;
 	char promptsDirectory[100];
-	char campaign_id[80];
+	char campaign_id[100];
 	char campaign_name[50];
 	char promptsPath[10][100];
 	OBD_DIAL_PLAN obdDialPlan;
@@ -145,6 +145,13 @@ public:
 	WORD	nTotalCh;
 	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh;//, CGMaxCHNum;
 	char circle[20], circleLrn[5]; //, zone[20];
+	//Data stored in DBSettings.INI file
+	char host[255];
+	char DBName[255];
+	char username[255];
+	char password[255];
+	int port;
+
 	CH_INFO* ChInfo;
 	CLogger logger;
 	//BOOL isReloadConfiguration;
@@ -167,11 +174,18 @@ public:
 	};
 	static UINT SetChannelsStateCount(LPVOID  chCount);
 
-	void CallProcedure(std::string &);
+	struct DeallocateProcParam
+	{
+		CSpiceOBDDlg * spiceDlg;
+		char* campaign_id;
+	};
+
+	static UINT CallProcedure(LPVOID deallocateProcParam);
 	BOOL UpdatePhNumbersStatus(int ch);
 	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();
 	void GetDTMFandDNISBuffer(int ch);
+	int PlayMediaFile(int ch, int promptsNumber);
 	BOOL isCampaignChannelsCleared(int campaignKey);
 	int GetAnIdleChannel();
 	BOOL InitCtiBoard();

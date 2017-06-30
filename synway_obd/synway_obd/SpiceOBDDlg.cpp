@@ -169,13 +169,7 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	connInsert = mysql_init(NULL);
 	connUpdate = mysql_init(NULL);
 	connPort = mysql_init(NULL);
-	connCallProc = mysql_init(NULL);
-	//Data stored in DBSettings.INI file
-	char host[255];
-	char DBName[255];
-	char username[255];
-	char password[255];
-	int port;
+
 	//unsigned int connTimeOut = 365 * 24 * 3600;
 	char CurPath[260], InitDBSettings[260];
 	GetCurrentDirectoryA(200, CurPath);
@@ -189,6 +183,14 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	GetPrivateProfileStringA("Database", "circle", "circle", circle, 20, InitDBSettings);
 
 	port = GetPrivateProfileIntA("Database", "Port", 3306, InitDBSettings);
+	
+	//Setting title name
+	char titleName[50];
+	StrCpyA(titleName, "Spice OBD - ");
+	StrCatA(titleName, circle);
+	SetWindowTextA(m_hWnd, titleName);
+
+
 	//CGMaxCHNum = GetPrivateProfileIntA("Database", "CGMaxCHNum", 30, InitDBSettings);
 	//nTotalCh = GetPrivateProfileIntA("Database", "TotalChannelsCount", 90, InitDBSettings);
 	logger.log(LOGINFO, "host: %s, username: %s, password: %s, dbname: %s, port: %d", host, username, password, DBName, port);
@@ -224,11 +226,6 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	}
 	//mysql_options(connPort, MYSQL_OPT_CONNECT_TIMEOUT, &connTimeOut);
 	if (mysql_real_connect(connPort, host, username, password, DBName, port, NULL, 0) == 0)
-	{
-		AfxMessageBox(L"Connection failed to Database for Dialer base");
-		PostQuitMessage(0);
-	}
-	if (mysql_real_connect(connCallProc, host, username, password, DBName, port, NULL, CLIENT_MULTI_STATEMENTS | CLIENT_MULTI_RESULTS) == 0)
 	{
 		AfxMessageBox(L"Connection failed to Database for Dialer base");
 		PostQuitMessage(0);
@@ -270,7 +267,7 @@ void CSpiceOBDDlg::SetChannelInitialStatus()
 	UpDateATrunkChListCtrl();
 }
 
-void CSpiceOBDDlg::CallProcedure(std::string & campaign_id)
+UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 {
 	MYSQL_BIND bind[1];
 	MYSQL_STMT *stmt;
@@ -278,27 +275,36 @@ void CSpiceOBDDlg::CallProcedure(std::string & campaign_id)
 	char str_data[80];
 
 	char PROC_SAMPLE[1024];
-
+	DeallocateProcParam * deallocateParams = (DeallocateProcParam*)deallocateProcParam;
+	CSpiceOBDDlg* self =  deallocateParams->spiceDlg;
 	try
 	{
+		self->connCallProc = mysql_init(NULL);
+		
+		if (mysql_real_connect(self->connCallProc, self->host, self->username, self->password, self->DBName, self->port, NULL, CLIENT_MULTI_STATEMENTS | CLIENT_MULTI_RESULTS) == 0)
+		{
+			AfxMessageBox(L"Connection failed to Database for Dialer base");
+			PostQuitMessage(0);
+		}
+
 		StrCpyA(PROC_SAMPLE, "CALL procDeallocateChannel(?)");
 
-		logger.log(LOGINFO, "CallProcedure function start campaign_id : %s", campaign_id.c_str());
-		stmt = mysql_stmt_init(connCallProc);
+		self->logger.log(LOGINFO, "CallProcedure function start campaign_id : %s", deallocateParams->campaign_id);
+		stmt = mysql_stmt_init(self->connCallProc);
 		if (!stmt)
 		{
-			logger.log(LOGERR, " mysql_stmt_init(), out of memory");
+			self->logger.log(LOGERR, " mysql_stmt_init(), out of memory");
 		}
 		if (mysql_stmt_prepare(stmt, PROC_SAMPLE, strlen(PROC_SAMPLE)))
 		{
-			logger.log(LOGERR, " mysql_stmt_prepare(), procedure failed");
-			logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+			self->logger.log(LOGERR, " mysql_stmt_prepare(), procedure failed");
+			self->logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
 		}
 		int param_count = mysql_stmt_param_count(stmt);
 
 		if (param_count != 1) /* validate parameter count */
 		{
-			logger.log(LOGERR, " invalid parameter count returned by MySQL");
+			self->logger.log(LOGERR, " invalid parameter count returned by MySQL");
 		}
 
 		memset(bind, 0, sizeof(bind));
@@ -314,26 +320,32 @@ void CSpiceOBDDlg::CallProcedure(std::string & campaign_id)
 
 		if (mysql_stmt_bind_param(stmt, bind))
 		{
-			logger.log(LOGERR, " mysql_stmt_bind_param() failed");
-			logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+			self->logger.log(LOGERR, " mysql_stmt_bind_param() failed");
+			self->logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
 		}
 
-		strncpy_s(str_data, campaign_id.c_str(), 80); /* string  */
+		strncpy_s(str_data, deallocateParams->campaign_id, 100); /* string  */
 		str_length = strlen(str_data);
 
 
 		if (mysql_stmt_execute(stmt))
 		{
-			logger.log(LOGERR, " mysql_stmt_execute(), 1 failed");
-			logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+			self->logger.log(LOGERR, " mysql_stmt_execute(), 1 failed");
+			self->logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
 		}
 		mysql_stmt_close(stmt);
-		logger.log(LOGINFO, "CallProcedure function end campaign_id : %s", campaign_id.c_str());
+		if (self->connCallProc != NULL)
+		{
+			mysql_close(self->connCallProc);
+			self->connCallProc = NULL;
+		}
+		self->logger.log(LOGINFO, "CallProcedure function end campaign_id : %s", deallocateParams->campaign_id);
 	}
 	catch (...)
 	{
-		logger.log(LOGERR, "Unhandled exception caught in call procedure...");
+		self->logger.log(LOGERR, "Unhandled exception caught in call procedure...");
 	}
+	return 0;
 }
 
 
@@ -504,21 +516,11 @@ BOOL CSpiceOBDDlg::GetDBData()
 				//checks if this campaign completed.
 				if (isCampaignCompleted)
 				{
-					std::string tmpCampaignID = Campaigns.at(campKey).campaign_id;
+					/*std::string tmpCampaignID = Campaigns.at(campKey).campaign_id;
 					logger.log(LOGINFO, "CallProcedure called campaign_id : %s", tmpCampaignID.c_str());
-					CallProcedure(tmpCampaignID);
-					//char queryProcStr[256];
-					////mysql_stmt_prepare()
-					//sprintf_s(queryProcStr, "CALL procDeallocateChannel('%s')", Campaigns.at(campKey).campaign_id);
-					//logger.log(LOGINFO, "queryProcStr: %s", queryProcStr);
-					//mysql_query(connCallProc, queryProcStr);
-					////logger.log(LOGINFO, "query_stateUpdate: %d", query_stateUpdate);
-					//int query_stateUpdate = mysql_next_result(connCallProc);
-					//if (query_stateUpdate != 0)
-					//{
-					//	CString err(mysql_error(connCallProc));
-					//	AfxMessageBox(err);
-					//}
+					CallProcedure(tmpCampaignID);*/
+					logger.log(LOGINFO, "CallProcedure called campaign_id : %s", Campaigns.at(campKey).campaign_id);
+					CWinThread* procThread = AfxBeginThread(CallProcedure, new DeallocateProcParam{ this, Campaigns.at(campKey).campaign_id });
 				}
 			}
 			//copying circle and zone to the global variables
@@ -529,37 +531,40 @@ BOOL CSpiceOBDDlg::GetDBData()
 			}*/
 			/*for (size_t i = 1; i <= Campaigns.size(); i++)
 			{*/
-			char tempPath[100];
-			char fileName[16];
-			int j = 1;
-			StrCpyA(tempPath, "");
-			//Campaigns.at(i).isCampaignCompleted = false;
-			while (true)
-			{
-				StrCpyA(tempPath, Campaigns.at(campKey).promptsDirectory);
-				sprintf_s(fileName, "%d.wav", j);
-				StrCatA(tempPath, fileName);
-				//logger.log(LOGINFO, "tempPath: %s", tempPath);
-				if (PathFileExistsA(tempPath))
-				{
-					/*index = i * 10 + j;
-					sprintf_s(alias, "alias%d", index);
-					if (SsmLoadIndexData(index, alias, 7, tempPath, 0, -1) != 0)
-					{
-					CString errMsg;
-					errMsg.Format(L"Load Index %d Error", index);
-					AfxMessageBox(errMsg);
-					PostQuitMessage(0);
-					}*/
-					StrCpyA(Campaigns.at(campKey).promptsPath[j], tempPath);
-					//logger.log(LOGINFO, "Path: %s, index: %s, total Index: %d", tempPath, Campaigns.at(i).promptsPath[j], SsmGetTotalIndexSeg());
-					j++;
-				}
-				else
-				{
-					break;
-				}
-			}//End While
+			//if (Campaigns.at(campKey).obdDialPlan != Informative)
+			//{
+			//	char tempPath[100];
+			//	char fileName[16];
+			//	int j = 1;
+			//	StrCpyA(tempPath, "");
+			//	//Campaigns.at(i).isCampaignCompleted = false;
+			//	while (true)
+			//	{
+			//		StrCpyA(tempPath, Campaigns.at(campKey).promptsDirectory);
+			//		sprintf_s(fileName, "%d.wav", j);
+			//		StrCatA(tempPath, fileName);
+			//		//logger.log(LOGINFO, "tempPath: %s", tempPath);
+			//		if (PathFileExistsA(tempPath))
+			//		{
+			//			/*index = i * 10 + j;
+			//			sprintf_s(alias, "alias%d", index);
+			//			if (SsmLoadIndexData(index, alias, 7, tempPath, 0, -1) != 0)
+			//			{
+			//			CString errMsg;
+			//			errMsg.Format(L"Load Index %d Error", index);
+			//			AfxMessageBox(errMsg);
+			//			PostQuitMessage(0);
+			//			}*/
+			//			StrCpyA(Campaigns.at(campKey).promptsPath[j], tempPath);
+			//			//logger.log(LOGINFO, "Path: %s, index: %s, total Index: %d", tempPath, Campaigns.at(i).promptsPath[j], SsmGetTotalIndexSeg());
+			//			j++;
+			//		}
+			//		else
+			//		{
+			//			break;
+			//		}
+			//	}//End While
+			//}
 		 //update campaign status while it is in execution
 		 /*int query_state;
 		 char queryStr[256];
@@ -997,7 +1002,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 //Update ph number status in table...
 BOOL CSpiceOBDDlg::UpdatePhNumbersStatus(int ch)
 {
-	char queryStr[256];
+	char queryStr[1024];
 
 	sprintf_s(queryStr, "update tbl_outdialer_base set status = 1 where campaign_id = '%s' and ani = '%s'",
 		Campaigns.at(ChInfo[ch].CampaignID).campaign_id, ChInfo[ch].CDRStatus.encrypted_ani);
@@ -1037,7 +1042,7 @@ BOOL CSpiceOBDDlg::UpdatePhNumbersStatus(int ch)
 //Update record in table...
 BOOL CSpiceOBDDlg::UpdateReasonInDialerBase(int ch)
 {
-	char queryStr[256];
+	char queryStr[1024];
 
 	sprintf_s(queryStr, "update tbl_outdialer_base set reason = '%s' where campaign_id = '%s' and ani = '%s'",
 		ChInfo[ch].CDRStatus.reason, Campaigns.at(ChInfo[ch].CampaignID).campaign_id, ChInfo[ch].CDRStatus.encrypted_ani);
@@ -1499,10 +1504,40 @@ void CSpiceOBDDlg::GetDTMFandDNISBuffer(int ch)
 	if (StrCmpA(ChInfo[ch].CDRStatus.DNIS, ""))
 	{
 		StrCatA(ChInfo[ch].CDRStatus.DNISBuf, ChInfo[ch].CDRStatus.DNIS);
+		StrCatA(ChInfo[ch].CDRStatus.DNISBuf, "|");
+		StrCpyA(ChInfo[ch].CDRStatus.DNIS, "");
 	}
-	StrCatA(ChInfo[ch].CDRStatus.DNISBuf, "|");
-	StrCpyA(ChInfo[ch].CDRStatus.DNIS, "");
 }
+
+int CSpiceOBDDlg::PlayMediaFile(int ch, int promptsNumber)
+{
+	char tmpMediaFile[31], tmpMediaPath[100];
+	StrCpyA(tmpMediaPath, Campaigns.at(ChInfo[ch].CampaignID).promptsDirectory);
+	sprintf_s(tmpMediaFile, "%d.wav", promptsNumber);
+	
+	StrCatA(tmpMediaPath, tmpMediaFile);
+	
+	logger.log(LOGINFO, "Media file Path to be played: %s", tmpMediaPath);
+	
+	if (PathFileExistsA(tmpMediaPath))
+	{
+		if (SsmPlayFile(ch, tmpMediaPath, -1, 0, -1) == -1)
+		{
+			return -1;
+		}
+		CString promptName(tmpMediaFile);
+		m_TrkChList.SetItemText(ch, 5, promptName);
+	}
+	else
+	{
+		CString promptsFileName(tmpMediaFile);
+		promptsFileName.Append(_T(" Prompt Missing!!!"));
+		AfxMessageBox(promptsFileName);
+		PostQuitMessage(0);
+	}
+	return 0;
+}
+
 
 
 void CSpiceOBDDlg::DoUserWork()
@@ -1662,8 +1697,8 @@ void CSpiceOBDDlg::DoUserWork()
 				StrCpyA(ChInfo[i].CDRStatus.reason, "Answered");
 				//StrCpyA(ChInfo[i].CDRStatus.reason_code, "7");
 				ChInfo[i].CDRStatus.answer_time = time(0);
-				logger.log(LOGINFO, "file to be played: %s", Campaigns.at(tempCampId).promptsPath[1]);
-				if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[1], -1, 0, -1) == -1)
+				//logger.log(LOGINFO, "file to be played: %s", Campaigns.at(tempCampId).promptsPath[1]);
+				if (/*SsmPlayIndexString(i, CampID)*/ PlayMediaFile(i, 1) == -1)
 				{
 					LogErrorCodeAndMessage(i);
 					HangupCall(i);
@@ -1672,11 +1707,9 @@ void CSpiceOBDDlg::DoUserWork()
 				{
 					logger.log(LOGINFO, "Call picked up channel: %d, phone number: %s", i, ChInfo[i].pPhoNumBuf);
 					
-					if (StrCmpA(circleLrn, ""))
+					if (StrCmpA(circleLrn, "") && strlen(ChInfo[i].pPhoNumBuf) > 10) //remove circle LRN from phonne number 
 					{
-						std::string tempPhnBufStr = ChInfo[i].pPhoNumBuf;
-						tempPhnBufStr.erase(0, 4);
-						StrCpyA(ChInfo[i].pPhoNumBuf, tempPhnBufStr.c_str());
+						strncpy_s(ChInfo[i].pPhoNumBuf, ChInfo[i].pPhoNumBuf + 4, sizeof(ChInfo[i].pPhoNumBuf));
 					}
 
 					ChInfo[i].nStep = USER_TALKING;
@@ -1932,9 +1965,9 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								//Get song details
 								char songQuery[1024], songName[50], songCode[10], levelType[10], patchDNIS[31];
-								int queryState, jumpLevel, invalidKeyLevel;
+								int queryState, jumpLevel;
 
-								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level, invalid_key from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 1",
 									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(connSelect, songQuery);
@@ -1952,7 +1985,6 @@ void CSpiceOBDDlg::DoUserWork()
 								StrCpyA(levelType, "");
 								StrCpyA(patchDNIS, "");
 								jumpLevel = -1;
-								invalidKeyLevel = 1;
 								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
 									StrCpyA(songName, rowPromo[0]);
@@ -1963,11 +1995,10 @@ void CSpiceOBDDlg::DoUserWork()
 									}
 									else
 									{
-										StrCpyA(songCode, rowPromo[1]);
+										sprintf_s(songCode, "%04s", rowPromo[1]);
 									}
 									StrCpyA(patchDNIS, rowPromo[3]);
 									jumpLevel = atoi(rowPromo[4]);
-									invalidKeyLevel = atoi(rowPromo[5]);
 								}
 								mysql_free_result(resPromo);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -1978,7 +2009,7 @@ void CSpiceOBDDlg::DoUserWork()
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 4;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
+									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1)*/ PlayMediaFile(i, 4) == -1)
 									{
 										LogErrorCodeAndMessage(i);
 										HangupCall(i);
@@ -2034,12 +2065,36 @@ void CSpiceOBDDlg::DoUserWork()
 								}
 								else //Wrong Input
 								{
+									//Fetch invalid input repeat level value.
+									char songQuery[1024];
+									int queryState, invalidKeyLevel;
+
+									sprintf_s(songQuery, "select invalid_key from tbl_songs_master where campaign_id = '%s' and repeat_level = 1 limit 1",
+										Campaigns.at(ChInfo[i].CampaignID).campaign_id);
+
+									queryState = mysql_query(connSelect, songQuery);
+									logger.log(LOGINFO, "Song query for invalid Input: %s", songQuery);
+									if (queryState != 0)
+									{
+										CString err(mysql_error(connSelect));
+										AfxMessageBox(err);
+									}
+									MYSQL_RES *resPromo = mysql_store_result(connSelect);
+									MYSQL_ROW rowPromo;
+									invalidKeyLevel = 1;
+									if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
+									{
+										invalidKeyLevel = atoi(rowPromo[0]);
+									}
+									mysql_free_result(resPromo);
+
+
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 7;
 									ChInfo[i].levelNumber = invalidKeyLevel;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
+									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1)*/PlayMediaFile(i, 6) == -1)
 									{
 										LogErrorCodeAndMessage(i);
 										HangupCall(i);
@@ -2076,7 +2131,7 @@ void CSpiceOBDDlg::DoUserWork()
 								ChInfo[i].ConsentState = 7;
 								ChInfo[i].levelNumber = noKeyLevel;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
+								if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1)*/PlayMediaFile(i, 7) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -2104,9 +2159,9 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								//Get song details
 								char songQuery[1024], songName[50], songCode[10], levelType[10], patchDNIS[31];
-								int queryState, jumpLevel, invalidKeyLevel;
+								int queryState, jumpLevel;
 
-								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level, invalid_key from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 2",
 									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(connSelect, songQuery);
@@ -2124,7 +2179,6 @@ void CSpiceOBDDlg::DoUserWork()
 								StrCpyA(levelType, "");
 								StrCpyA(patchDNIS, "");
 								jumpLevel = -1;
-								invalidKeyLevel = 2;
 								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
 									StrCpyA(songName, rowPromo[0]);
@@ -2135,11 +2189,10 @@ void CSpiceOBDDlg::DoUserWork()
 									}
 									else
 									{
-										StrCpyA(songCode, rowPromo[1]);
+										sprintf_s(songCode, "%04s", rowPromo[1]);
 									}
 									StrCpyA(patchDNIS, rowPromo[3]);
 									jumpLevel = atoi(rowPromo[4]);
-									invalidKeyLevel = atoi(rowPromo[5]);
 								}
 								mysql_free_result(resPromo);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -2150,7 +2203,7 @@ void CSpiceOBDDlg::DoUserWork()
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 4;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
+									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1)*/PlayMediaFile(i, 4) == -1)
 									{
 										LogErrorCodeAndMessage(i);
 										HangupCall(i);
@@ -2206,12 +2259,36 @@ void CSpiceOBDDlg::DoUserWork()
 								}
 								else //Wrong Input
 								{
+									//Fetch invalid input repeat level value.
+									char songQuery[1024];
+									int queryState, invalidKeyLevel;
+
+									sprintf_s(songQuery, "select invalid_key from tbl_songs_master where campaign_id = '%s' and repeat_level = 2 limit 1",
+										Campaigns.at(ChInfo[i].CampaignID).campaign_id);
+
+									queryState = mysql_query(connSelect, songQuery);
+									logger.log(LOGINFO, "Song query for invalid Input: %s", songQuery);
+									if (queryState != 0)
+									{
+										CString err(mysql_error(connSelect));
+										AfxMessageBox(err);
+									}
+									MYSQL_RES *resPromo = mysql_store_result(connSelect);
+									MYSQL_ROW rowPromo;
+									invalidKeyLevel = 2;
+									if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
+									{
+										invalidKeyLevel = atoi(rowPromo[0]);
+									}
+									mysql_free_result(resPromo);
+
+
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 7;
 									ChInfo[i].levelNumber = invalidKeyLevel;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
+									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1)*/PlayMediaFile(i, 6) == -1)
 									{
 										LogErrorCodeAndMessage(i);
 										HangupCall(i);
@@ -2248,7 +2325,7 @@ void CSpiceOBDDlg::DoUserWork()
 								ChInfo[i].ConsentState = 7;
 								ChInfo[i].levelNumber = noKeyLevel;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
+								if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1)*/PlayMediaFile(i, 7) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -2276,9 +2353,9 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								//Get song details
 								char songQuery[1024], songName[50], songCode[10], levelType[10], patchDNIS[31];
-								int queryState, jumpLevel, invalidKeyLevel;
+								int queryState, jumpLevel;
 
-								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level, invalid_key from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 3",
+								sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = 3",
 									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf);
 
 								queryState = mysql_query(connSelect, songQuery);
@@ -2296,7 +2373,6 @@ void CSpiceOBDDlg::DoUserWork()
 								StrCpyA(levelType, "");
 								StrCpyA(patchDNIS, "");
 								jumpLevel = -1;
-								invalidKeyLevel = 3;
 								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
 									StrCpyA(songName, rowPromo[0]);
@@ -2307,11 +2383,10 @@ void CSpiceOBDDlg::DoUserWork()
 									}
 									else
 									{
-										StrCpyA(songCode, rowPromo[1]);
+										sprintf_s(songCode, "%04s", rowPromo[1]);
 									}
 									StrCpyA(patchDNIS, rowPromo[3]);
 									jumpLevel = atoi(rowPromo[4]);
-									invalidKeyLevel = atoi(rowPromo[5]);
 								}
 								mysql_free_result(resPromo);
 								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
@@ -2322,7 +2397,7 @@ void CSpiceOBDDlg::DoUserWork()
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 4;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
+									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) */ PlayMediaFile(i, 4) == -1)
 									{
 										LogErrorCodeAndMessage(i);
 										HangupCall(i);
@@ -2378,12 +2453,36 @@ void CSpiceOBDDlg::DoUserWork()
 								}
 								else //Wrong Input
 								{
+									//Fetch invalid input repeat level value.
+									char songQuery[1024];
+									int queryState, invalidKeyLevel;
+
+									sprintf_s(songQuery, "select invalid_key from tbl_songs_master where campaign_id = '%s' and repeat_level = 3 limit 1",
+										Campaigns.at(ChInfo[i].CampaignID).campaign_id);
+
+									queryState = mysql_query(connSelect, songQuery);
+									logger.log(LOGINFO, "Song query for invalid Input: %s", songQuery);
+									if (queryState != 0)
+									{
+										CString err(mysql_error(connSelect));
+										AfxMessageBox(err);
+									}
+									MYSQL_RES *resPromo = mysql_store_result(connSelect);
+									MYSQL_ROW rowPromo;
+									invalidKeyLevel = 3;
+									if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
+									{
+										invalidKeyLevel = atoi(rowPromo[0]);
+									}
+									mysql_free_result(resPromo);
+
+
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
 									ChInfo[i].ConsentState = 7;
 									ChInfo[i].levelNumber = invalidKeyLevel;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-									if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1) == -1)
+									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1)*/PlayMediaFile(i, 6) == -1)
 									{
 										LogErrorCodeAndMessage(i);
 										HangupCall(i);
@@ -2420,7 +2519,7 @@ void CSpiceOBDDlg::DoUserWork()
 								ChInfo[i].ConsentState = 7;
 								ChInfo[i].levelNumber = noKeyLevel;
 								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1) == -1)
+								if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1)*/PlayMediaFile(i, 7) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -2519,7 +2618,7 @@ void CSpiceOBDDlg::DoUserWork()
 						ChInfo[i].ConsentState = ChInfo[i].levelNumber;
 						ChInfo[i].IVRChannelNumber = -1;
 						//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-						if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].levelNumber], -1, 0, -1) == -1)
+						if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].levelNumber], -1, 0, -1)*/ PlayMediaFile(i, ChInfo[i].levelNumber) == -1)
 						{
 							LogErrorCodeAndMessage(i);
 							HangupCall(i);
@@ -2561,7 +2660,7 @@ void CSpiceOBDDlg::DoUserWork()
 						{
 							ChInfo[i].ConsentState = ChInfo[i].levelNumber;
 							//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-							if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].levelNumber], -1, 0, -1) == -1)
+							if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[ChInfo[i].levelNumber], -1, 0, -1)*/ PlayMediaFile(i , ChInfo[i].levelNumber) == -1)
 							{
 								LogErrorCodeAndMessage(i);
 								HangupCall(i);
@@ -2569,8 +2668,22 @@ void CSpiceOBDDlg::DoUserWork()
 							int pnFormat; long pnTime;
 							if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
 							{
-								WORD wTimeOut = pnTime / 1000 + 5;
-								SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
+								if (pnTime < 1000) //wav file is empty hang up call.
+								{
+									SsmStopPlay(i);
+									ChInfo[i].ConsentState = 6;
+									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[5], -1, 0, -1)*/ PlayMediaFile(i, 5) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
+								}
+								else
+								{
+									WORD wTimeOut = pnTime / 1000 + 5;
+									SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
+								}
 							}
 						}
 						else
@@ -2578,7 +2691,7 @@ void CSpiceOBDDlg::DoUserWork()
 							SsmStopPlay(i);
 							ChInfo[i].ConsentState = 6;
 							//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-							if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[5], -1, 0, -1) == -1)
+							if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[5], -1, 0, -1)*/ PlayMediaFile(i, 5) == -1)
 							{
 								LogErrorCodeAndMessage(i);
 								HangupCall(i);
