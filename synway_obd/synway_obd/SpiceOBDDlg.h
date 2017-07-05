@@ -23,8 +23,6 @@ enum APP_USER_STATE {
 	USER_WAIT_DIAL_TONE,
 	USER_WAIT_REMOTE_PICKUP,
 	USER_TALKING,
-	USER_CALL_WAIT_PATCHUP,
-	USER_CALL_PATCHUP,
 	USER_WAIT_HANGUP
 };
 
@@ -39,11 +37,19 @@ enum OBD_DIAL_PLAN
 	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
 	//AcquisitionalOBDWithout1stConsent,
 	AcquisitionalOBDWith1stConsent, /*1: welcome, 2: No input again, 3: Thanks 4: wrong*/
-	AcquisitionalOBDWithIVRServiceCrossPromo, /*Promprs Index are as 1: 1st prompt , 2: 2nd prompts , 3: 3rd prompt, 4: idea jingle ,5: thanks , 6: wrong input, 7 : no input*/
-	AcquisitionalOBDWith1stIVRConsentDT10, /*Promprs Index are as 1: 1st prompt , 2: thanks, 3: idea jingle, 4: wrong input, 5: no input*/
-	AcquisitionalOBDWith1stIVRConsentDT20,/*Promprs Index are as 1: 1st prompt , 2: 2nd prompt , 3: idea jingle, 4: thanks, 5: wrong input, 6: no input  */
-	AcquisitionalOBDWith1stIVRConsentDT30,/*Promprs Index are as 1: 1st prompt , 2: 2nd prompts , 3: 3rd prompt, 4: idea jingle ,5: thanks , 6: wrong input, 7 : no input*/
+	AcquisitionalOBDWithIVRServiceCrossPromo /*Promprs Index are as 1-99 product prompts , welcome - 100, idea jingle - 200, invalid input - 300, no input - 400, thanks - 500 */	
 };
+
+//different states during dt and service 
+enum DT_SERVICE_STATE
+{
+	USER_PLAY_PRODUCT,
+	USER_PLAYING_PRODUCT,
+	USER_CALL_WAIT_PATCHUP,
+	USER_CALL_PATCHUP,
+	USER_STOP_PLAYING
+};
+
 
 extern void getErrorResult(LPCTSTR  ApiName);
 
@@ -91,9 +97,9 @@ typedef struct {
 	int InUse;
 	int IVRChannelNumber; //channel number patchedup
 						  //char DtmfBuf[251];
-	int DtmfState;
+	DT_SERVICE_STATE DtServiceState;
 	int ConsentState;
-	int DTCounter;
+	//int DTCounter;
 	int levelNumber;
 	CDR_STATUS CDRStatus;
 	OBD_DIAL_PLAN DialPlanStatus;
@@ -181,6 +187,7 @@ public:
 	};
 
 	static UINT CallProcedure(LPVOID deallocateProcParam);
+	static BOOL isDeallocateProcedureCalled;
 	BOOL UpdatePhNumbersStatus(int ch);
 	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();
