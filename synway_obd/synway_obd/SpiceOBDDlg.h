@@ -193,6 +193,7 @@ public:
 	void ReadNumbersFromFiles();
 	void GetDTMFandDNISBuffer(int ch);
 	int PlayMediaFile(int ch, int promptsNumber);
+	void ContinuePlayingPrompts(int ch);
 	BOOL isCampaignChannelsCleared(int campaignKey);
 	int GetAnIdleChannel();
 	BOOL InitCtiBoard();
