@@ -188,6 +188,16 @@ public:
 
 	static UINT CallProcedure(LPVOID deallocateProcParam);
 	static BOOL isDeallocateProcedureCalled;
+
+	typedef struct
+	{
+		int minChVal;
+		int maxChVal;
+	}BlockedChannelRange;
+	char blockedRangeStr[100];
+	vector<BlockedChannelRange> blockedChannelsRange;
+	BOOL isChannelBlocked(int ch); //Find the channel is in blocked range
+
 	BOOL UpdatePhNumbersStatus(int ch);
 	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();

@@ -157,7 +157,7 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 	//GetDBData();
 	//SetTimer(1000, 200, NULL);
 	IsTimerOn = false;
-	//OnBnClickedDiallingStart();
+	OnBnClickedDiallingStart();
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
@@ -182,6 +182,7 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	GetPrivateProfileStringA("Database", "username", "root", username, 255, InitDBSettings);
 	GetPrivateProfileStringA("Database", "password", "sdl@1234", password, 255, InitDBSettings);
 	GetPrivateProfileStringA("Database", "circle", "circle", circle, 20, InitDBSettings);
+	GetPrivateProfileStringA("Database", "blockedchannelrange", "", blockedRangeStr, 100, InitDBSettings);
 
 	port = GetPrivateProfileIntA("Database", "Port", 3306, InitDBSettings);
 
@@ -707,8 +708,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	wchar_t tmpstr[51];
 	int i, nIndex;
 	logger.log(LOGINFO, "UpDateATrunkChListCtrl Start");
-	if (isDeallocateProcedureCalled)
-		return;
+
 	for (i = 0, nIndex = 0; i < nTotalCh; i++)
 	{
 		//if (SsmGetChType(i) != 2) continue;
@@ -787,6 +787,10 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 
 		nIndex++;
 	}
+	
+	if (isDeallocateProcedureCalled)
+		return;
+
 	if (IsUpdate)
 	{
 		UpdateStatusAndPickNextRecords();
@@ -1566,6 +1570,18 @@ void CSpiceOBDDlg::ContinuePlayingPrompts(int ch)
 	}
 }
 
+BOOL CSpiceOBDDlg::isChannelBlocked(int chVal)
+{
+	for (vector<BlockedChannelRange>::iterator it = blockedChannelsRange.begin(); it != blockedChannelsRange.end(); it++)
+	{
+		if (chVal >= it->minChVal && chVal <= it->maxChVal)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 void CSpiceOBDDlg::DoUserWork()
 {
 	int nResult, nDirection;
@@ -1574,9 +1590,11 @@ void CSpiceOBDDlg::DoUserWork()
 	int tempCampId;
 	IsUpdate = false;
 	WORD releaseCode;
-	logger.log(LOGERR, "DoUserWork Start");
+	logger.log(LOGINFO, "DoUserWork Start");
 	for (int i = 0; i < nTotalCh; i++)
 	{
+		if (isChannelBlocked(i)) continue; //skip these channels if they are blocked
+
 		if (SsmGetChType(i) != 11) continue;
 		nResult = SsmGetAutoCallDirection(i, &nDirection);
 
@@ -2584,7 +2602,7 @@ void CSpiceOBDDlg::DoUserWork()
 			break;
 		}//end switch
 	}//end for
-	logger.log(LOGERR, "DoUserWork End");
+	logger.log(LOGINFO, "DoUserWork End");
 }
 
 BOOL CSpiceOBDDlg::InitCtiBoard()
@@ -2743,7 +2761,17 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			//nIVRMaxCh = CGMaxCHNum - 1;//nTotalCh;
 		}
 		mysql_free_result(resPort);
-		logger.log(LOGINFO, "total Ports: %d, nIVRMinCh: %d, nIVRMaxCh: %d", nTotalCh, nIVRMinCh, nIVRMaxCh);
+		logger.log(LOGINFO, "total Ports: %d, nIVRMinCh: %d, nIVRMaxCh: %d, blocked range : %s", nTotalCh, nIVRMinCh, nIVRMaxCh, blockedRangeStr);
+
+		//get channels range from file and fill them in vector 
+		std::string blockedRange = blockedRangeStr;
+		while (!blockedRange.empty())
+		{
+			size_t DollarPos = blockedRange.find_first_of('$', 0);
+			std::string tmpStr = blockedRange.substr(0, DollarPos);
+			blockedChannelsRange.push_back({ atoi(tmpStr.substr(0, tmpStr.find("-")).c_str()), atoi(tmpStr.substr(tmpStr.find("-") + 1, tmpStr.length() - 1).c_str()) });
+			blockedRange.erase(0, DollarPos + 1);
+		}
 
 		if (GetDBData() == TRUE)
 		{
@@ -2871,6 +2899,7 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 			}
 			if (IsTimerOn && isAllChannelsCleared)
 			{
+				OnBnClickedDiallingStop();
 				KillTimer(1000);
 				IsTimerOn = false;
 			}
