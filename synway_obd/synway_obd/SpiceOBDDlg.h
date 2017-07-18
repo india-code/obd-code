@@ -91,6 +91,7 @@ typedef struct {
 	// trunck channel vars
 	bool  EnCalled;
 	BOOL rowTobeUpdated;
+	BOOL isChannelBlocked;
 	bool isIVRChannel;
 	int   lineState;
 	BOOL isAvailable;
@@ -162,6 +163,7 @@ public:
 	CLogger logger;
 	//BOOL isReloadConfiguration;
 	static int OffSet, row_count, getAndUpdateRowCount;
+	int mWaitDialAnswerTime;
 	AESEncryption aesEncryption;
 	bool IsUpdate;
 	BOOL IsStartDialling;
@@ -196,11 +198,12 @@ public:
 	}BlockedChannelRange;
 	char blockedRangeStr[100];
 	vector<BlockedChannelRange> blockedChannelsRange;
-	BOOL isChannelBlocked(int ch); //Find the channel is in blocked range
+	BOOL IsChannelBlocked(int ch); //Find the channel is in blocked range
 
 	BOOL UpdatePhNumbersStatus(int ch);
 	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();
+	void WriteToINIFile(const char* key, const char* value);
 	void GetDTMFandDNISBuffer(int ch);
 	int PlayMediaFile(int ch, int promptsNumber);
 	void ContinuePlayingPrompts(int ch);
@@ -211,6 +214,7 @@ public:
 	void SetChannelInitialStatus();
 	void InitUserDialingList();
 	void InitilizeDBConnection();
+	void RefreshDBConnection(MYSQL* dbConn, const char* dbQuery);
 	BOOL GetDBData();
 	BOOL UpdateDBData();
 	void CloseDBConn();
@@ -246,16 +250,24 @@ protected:
 	afx_msg void OnDestroy();
 	afx_msg void OnTimer(UINT nIDEvent);
 	afx_msg void OnBnClickedLogLevel();
+	afx_msg void OnBnClickedDiallingStart();
+	afx_msg void OnBnClickedDiallingStop();
+	afx_msg void OnBnClickedSetWaitAnswerTime();
+	afx_msg void OnCbnSelchangeWaitAnswerList();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
 public:
 	CListCtrl m_TrkChList;
 	int m_SetMinLogLevel;
-	afx_msg void OnBnClickedDiallingStart();
-	afx_msg void OnBnClickedDiallingStop();
+	
 	static CStatic dailingValCtrl;
 	static CStatic connctedValCtrl;
 	static CStatic cgValCtrl;
 	static CStatic totalChannelsAvlCtrl;
 	static CStatic nChDownCtrl;
+	std::string waitTimeListStr;
+	char curWaitTimeOutStr[20];
+	std::vector<int> waitTimeList;
+	CComboBox mWaitAnswerComboCtrl;
+	CButton mSetWaitAnswerTimeOutBtn;
 };

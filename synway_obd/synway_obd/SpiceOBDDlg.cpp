@@ -6,6 +6,7 @@
 #include "SpiceOBD.h"
 #include "SpiceOBDDlg.h"
 #include "afxdialogex.h"
+#include "errmsg.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -81,6 +82,8 @@ void CSpiceOBDDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_CG_VALUE, cgValCtrl);
 	DDX_Control(pDX, IDC_TOTCH_VAL, totalChannelsAvlCtrl);
 	DDX_Control(pDX, IDC_CHDWN_VAL, nChDownCtrl);
+	DDX_Control(pDX, IDC_WAIT_ANSWER_LIST, mWaitAnswerComboCtrl);
+	DDX_Control(pDX, IDC_SET_WAIT_ANSWER_TIME, mSetWaitAnswerTimeOutBtn);
 }
 
 BEGIN_MESSAGE_MAP(CSpiceOBDDlg, CDialogEx)
@@ -95,6 +98,8 @@ BEGIN_MESSAGE_MAP(CSpiceOBDDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_FATAL, &CSpiceOBDDlg::OnBnClickedLogLevel)
 	ON_BN_CLICKED(IDC_DIALLING_START, &CSpiceOBDDlg::OnBnClickedDiallingStart)
 	ON_BN_CLICKED(IDC_DIALLING_STOP, &CSpiceOBDDlg::OnBnClickedDiallingStop)
+	ON_BN_CLICKED(IDC_SET_WAIT_ANSWER_TIME, &CSpiceOBDDlg::OnBnClickedSetWaitAnswerTime)
+	ON_CBN_SELCHANGE(IDC_WAIT_ANSWER_LIST, &CSpiceOBDDlg::OnCbnSelchangeWaitAnswerList)
 END_MESSAGE_MAP()
 
 
@@ -172,7 +177,7 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	connPort = mysql_init(NULL);
 
 	//unsigned int connTimeOut = 365 * 24 * 3600;
-	char CurPath[260], InitDBSettings[260];
+	char CurPath[260], InitDBSettings[260], tmpWaitTimeListStr[256];
 	GetCurrentDirectoryA(200, CurPath);
 	StrCpyA(InitDBSettings, CurPath);
 	StrCatA(InitDBSettings, "\\DBSettings.INI");
@@ -183,8 +188,12 @@ void CSpiceOBDDlg::InitilizeDBConnection()
 	GetPrivateProfileStringA("Database", "password", "sdl@1234", password, 255, InitDBSettings);
 	GetPrivateProfileStringA("Database", "circle", "circle", circle, 20, InitDBSettings);
 	GetPrivateProfileStringA("Database", "blockedchannelrange", "", blockedRangeStr, 100, InitDBSettings);
+	//Get wait dial answer tie out parameters
+	GetPrivateProfileStringA("Database", "waitdialtimeRange", "30$40$50$", tmpWaitTimeListStr, 256, InitDBSettings);
+	GetPrivateProfileStringA("Database", "waitdialanswertimeout", "45", curWaitTimeOutStr, 20, InitDBSettings);
 
 	port = GetPrivateProfileIntA("Database", "Port", 3306, InitDBSettings);
+	waitTimeListStr = tmpWaitTimeListStr;
 
 	//Setting title name
 	char titleName[50];
@@ -352,6 +361,27 @@ UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 	return 0;
 }
 
+void CSpiceOBDDlg::RefreshDBConnection(MYSQL* dbConn, const char* dbQuery)
+{
+	logger.log(LOGERR, "RefreshDBConnection->Mysql Error: %s", mysql_error(dbConn));
+	unsigned int errorCode = mysql_errno(dbConn);
+	if (errorCode == CR_SERVER_LOST || errorCode == CR_SERVER_GONE_ERROR)
+	{
+		mysql_close(dbConn);
+		dbConn = mysql_init(NULL);
+		if (mysql_real_connect(dbConn, host, username, password, DBName, port, NULL, 0) == 0)
+		{
+			AfxMessageBox(L"Connection failed to Database");
+			PostQuitMessage(0);
+		}
+		int query_state = mysql_query(dbConn, dbQuery);
+		if (query_state != 0)
+		{
+			logger.log(LOGERR, "RefreshDBConnection failed->Mysql Error: %s", mysql_error(dbConn));
+		}
+	}
+}
+
 
 BOOL CSpiceOBDDlg::GetDBData()
 {
@@ -372,6 +402,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 
 		if (query_state != 0)
 		{
+			//RefreshDBConnection(conn, queryStr);
 			CString err(mysql_error(conn));
 			AfxMessageBox(err);
 		}
@@ -1570,7 +1601,7 @@ void CSpiceOBDDlg::ContinuePlayingPrompts(int ch)
 	}
 }
 
-BOOL CSpiceOBDDlg::isChannelBlocked(int chVal)
+BOOL CSpiceOBDDlg::IsChannelBlocked(int chVal)
 {
 	for (vector<BlockedChannelRange>::iterator it = blockedChannelsRange.begin(); it != blockedChannelsRange.end(); it++)
 	{
@@ -1593,7 +1624,7 @@ void CSpiceOBDDlg::DoUserWork()
 	logger.log(LOGINFO, "DoUserWork Start");
 	for (int i = 0; i < nTotalCh; i++)
 	{
-		if (isChannelBlocked(i)) continue; //skip these channels if they are blocked
+		if (ChInfo[i].isChannelBlocked) continue; //skip these channels if they are blocked
 
 		if (SsmGetChType(i) != 11) continue;
 		nResult = SsmGetAutoCallDirection(i, &nDirection);
@@ -2032,11 +2063,12 @@ void CSpiceOBDDlg::DoUserWork()
 								jumpLevel = -1;
 								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
-									StrCpyA(songName, rowPromo[0]);
+									//StrCpyA(songName, rowPromo[0]);
 									StrCpyA(levelType, rowPromo[2]);
 									if (StrCmpIA(levelType, "DT") == 0)
 									{
 										sprintf_s(songCode, "%07s", rowPromo[1]);
+										StrCpyA(ChInfo[i].CDRStatus.songName, rowPromo[1]); //copying song code for MIS instead of song name.
 									}
 									else
 									{
@@ -2046,9 +2078,9 @@ void CSpiceOBDDlg::DoUserWork()
 									jumpLevel = atoi(rowPromo[4]);
 								}
 								mysql_free_result(resPromo);
-								StrCpyA(ChInfo[i].CDRStatus.songName, songName);
+								//StrCpyA(ChInfo[i].CDRStatus.songName, songName);
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
-								if (StrCmpA(songName, "") && StrCmpA(songCode, "")) //Right Input
+								if (StrCmpA(songCode, "")) //Right Input
 								{
 									SsmStopPlay(i);
 									SsmClearRxDtmfBuf(i);
@@ -2719,11 +2751,20 @@ void CSpiceOBDDlg::openConsentLogFile()
 	ConsentFile.open(CurPath, std::ofstream::app);
 }
 
+
+void CSpiceOBDDlg::WriteToINIFile(const char* key, const char* value)
+{
+	char curDirectory[256];
+	GetCurrentDirectoryA(256, curDirectory);
+	StrCatA(curDirectory, "\\DBSettings.INI");
+	WritePrivateProfileStringA("Database", key, value, curDirectory);
+}
+
 BOOL CSpiceOBDDlg::InitilizeChannels()
 {
 	try {
 		//ReadNumbersFromFiles();
-
+		Sleep(5*1000); //wait for 5 seconds initially.
 		//get total ports and cg ports and campaign wise distribution
 		char queryStr[256];
 		sprintf_s(queryStr, "select total_ports, cgport, circle_lrn from tbl_port_manager where circle = '%s'", circle);
@@ -2773,6 +2814,28 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			blockedRange.erase(0, DollarPos + 1);
 		}
 
+		//Extract the list of wait timeout values from string and put them in drop down.
+		while (!waitTimeListStr.empty())
+		{
+			size_t DollarPos = waitTimeListStr.find_first_of('$', 0);
+			std::string tmpStr = waitTimeListStr.substr(0, DollarPos);
+			waitTimeList.push_back(atoi(tmpStr.c_str()));
+			waitTimeListStr.erase(0, DollarPos + 1);
+		}
+		for (std::vector<int>::iterator itr = waitTimeList.begin(); itr != waitTimeList.end(); itr++)
+		{
+			CString tmpStr;
+			tmpStr.Format(L"%d", *itr);
+			mWaitAnswerComboCtrl.AddString(tmpStr);
+		}
+		mWaitDialAnswerTime = atoi(curWaitTimeOutStr);
+		
+		CString defaultwaittimeStr(curWaitTimeOutStr);
+		mWaitAnswerComboCtrl.SetCurSel(mWaitAnswerComboCtrl.FindString(-1, defaultwaittimeStr));
+		mSetWaitAnswerTimeOutBtn.EnableWindow(false);//Disable set button in the beginning
+
+		SsmSetWaitAutoDialAnswerTime(mWaitDialAnswerTime);
+
 		if (GetDBData() == TRUE)
 		{
 			//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
@@ -2788,8 +2851,9 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			for (int i = 0; i < nTotalCh; i++)
 			{
 				ChInfo[i].EnCalled = false;
+				ChInfo[i].isChannelBlocked = IsChannelBlocked(i);
 				ChInfo[i].IVRChannelNumber = -1;
-				tempIVRMinCh = 0;
+				tempIVRMinCh = nIVRMinCh;
 				ChInfo[i].isIVRChannel = false;
 				ChInfo[i].isAvailable = true;
 				//ChInfo[i].rowTobeUpdated = false;
@@ -2885,7 +2949,7 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 		//Number should be dialled only between 8AM IST to 8:50 PM IST 
 		//char dateVal[25];
 		tm dateTime = logger.getTime(std::string());
-		if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 8 || dateTime.tm_hour >= 21)
+		if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 9 || dateTime.tm_hour >= 21)
 		{
 			IsDailingTimeInRange = false;
 			BOOL isAllChannelsCleared = true;
@@ -2982,4 +3046,20 @@ void CSpiceOBDDlg::SetDiallingStartStopBtn(BOOL enableStart)
 		btn = GetDlgItem(IDC_DIALLING_START);
 		btn->EnableWindow(false);
 	}
+}
+
+void CSpiceOBDDlg::OnBnClickedSetWaitAnswerTime()
+{
+	char tmpWaitTimeListStr[20];
+	mWaitDialAnswerTime = waitTimeList.at(mWaitAnswerComboCtrl.GetCurSel());
+	SsmSetWaitAutoDialAnswerTime(mWaitDialAnswerTime);
+	sprintf_s(tmpWaitTimeListStr, "%d", mWaitDialAnswerTime);
+	WriteToINIFile("waitdialanswertimeout", tmpWaitTimeListStr);
+	mSetWaitAnswerTimeOutBtn.EnableWindow(false);
+}
+
+
+void CSpiceOBDDlg::OnCbnSelchangeWaitAnswerList()
+{
+	mSetWaitAnswerTimeOutBtn.EnableWindow(true);
 }
