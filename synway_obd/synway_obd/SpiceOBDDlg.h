@@ -115,7 +115,7 @@ typedef struct {
 
 typedef struct
 {
-	std::string ani;
+	//std::string ani;
 	char encryptedAni[31];
 }pnNumWithEncryptedAni;
 
@@ -137,6 +137,7 @@ typedef struct
 	char promptsPath[10][100];
 	OBD_DIAL_PLAN obdDialPlan;
 	int minCh, maxCh;
+	int curRetryCount;
 }CampaignData;
 
 // CSpiceOBDDlg dialog
@@ -199,7 +200,7 @@ public:
 	char blockedRangeStr[100];
 	vector<BlockedChannelRange> blockedChannelsRange;
 	BOOL IsChannelBlocked(int ch); //Find the channel is in blocked range
-
+	BOOL IsPhNumCalledSuccess(char* encrypted_ani);
 	BOOL UpdatePhNumbersStatus(int ch);
 	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();
