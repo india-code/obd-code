@@ -201,7 +201,7 @@ public:
 	vector<BlockedChannelRange> blockedChannelsRange;
 	BOOL IsChannelBlocked(int ch); //Find the channel is in blocked range
 	BOOL IsPhNumCalledSuccess(char* encrypted_ani);
-	BOOL UpdatePhNumbersStatus(int ch);
+	BOOL UpdatePhNumbersStatus(const char* campaignId, const char* encryptedAni);
 	BOOL UpdateReasonInDialerBase(int ch);
 	void ReadNumbersFromFiles();
 	void WriteToINIFile(const char* key, const char* value);

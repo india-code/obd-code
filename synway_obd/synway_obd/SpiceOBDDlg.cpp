@@ -280,12 +280,13 @@ void CSpiceOBDDlg::SetChannelInitialStatus()
 
 UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 {
-	MYSQL_BIND bind[1];
-	MYSQL_STMT *stmt;
-	DWORD str_length;
-	char str_data[80];
+	//MYSQL_BIND bind[1];
+	//MYSQL_STMT *stmt;
+	//DWORD str_length;
+	char queryProc[1024];
+	char campaignId[100];
 
-	char PROC_SAMPLE[1024];
+	//char PROC_SAMPLE[1024];
 	isDeallocateProcedureCalled = true;
 	DeallocateProcParam * deallocateParams = (DeallocateProcParam*)deallocateProcParam;
 	CSpiceOBDDlg* self = deallocateParams->spiceDlg;
@@ -293,59 +294,69 @@ UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 	{
 		self->connCallProc = mysql_init(NULL);
 
-		if (mysql_real_connect(self->connCallProc, self->host, self->username, self->password, self->DBName, self->port, NULL, CLIENT_MULTI_STATEMENTS | CLIENT_MULTI_RESULTS) == 0)
+		if (mysql_real_connect(self->connCallProc, self->host, self->username, self->password, self->DBName, self->port, NULL, CLIENT_MULTI_STATEMENTS) == 0)
 		{
 			AfxMessageBox(L"Connection failed to Database for Dialer base");
 			PostQuitMessage(0);
 		}
+		StrCpyA(campaignId, deallocateParams->campaign_id);
 
-		StrCpyA(PROC_SAMPLE, "CALL procDeallocateChannel(?)");
+		sprintf_s(queryProc, "CALL procDeallocateChannel('%s')", campaignId);
 
-		self->logger.log(LOGINFO, "CallProcedure function start campaign_id : %s", deallocateParams->campaign_id);
-		stmt = mysql_stmt_init(self->connCallProc);
-		if (!stmt)
+		int query_state = mysql_query(self->connCallProc, queryProc);
+		if (query_state != 0)
 		{
-			self->logger.log(LOGERR, " mysql_stmt_init(), out of memory");
-		}
-		if (mysql_stmt_prepare(stmt, PROC_SAMPLE, strlen(PROC_SAMPLE)))
-		{
-			self->logger.log(LOGERR, " mysql_stmt_prepare(), procedure failed");
-			self->logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
-		}
-		int param_count = mysql_stmt_param_count(stmt);
-
-		if (param_count != 1) /* validate parameter count */
-		{
-			self->logger.log(LOGERR, " invalid parameter count returned by MySQL");
+			self->logger.log(LOGERR, "Procedure calling Mysql Error: %s", mysql_error(self->connCallProc));
 		}
 
-		memset(bind, 0, sizeof(bind));
+		//StrCpyA(PROC_SAMPLE, "CALL procDeallocateChannel(?)");
 
-		/* STRING PARAM */
-		/* This is a number type, so there is no need
-		to specify buffer_length */
-		bind[0].buffer_type = MYSQL_TYPE_STRING;
-		bind[0].buffer = (char*)str_data;
-		bind[0].buffer_length = 1024;
-		bind[0].is_null = 0;
-		bind[0].length = &str_length;
+		//self->logger.log(LOGINFO, "CallProcedure function start campaign_id : %s", deallocateParams->campaign_id);
+		//stmt = mysql_stmt_init(self->connCallProc);
+		//if (!stmt)
+		//{
+		//	self->logger.log(LOGERR, " mysql_stmt_init(), out of memory");
+		//}
+		//if (mysql_stmt_prepare(stmt, PROC_SAMPLE, strlen(PROC_SAMPLE)))
+		//{
+		//	self->logger.log(LOGERR, " mysql_stmt_prepare(), procedure failed");
+		//	self->logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+		//}
+		//int param_count = mysql_stmt_param_count(stmt);
 
-		if (mysql_stmt_bind_param(stmt, bind))
-		{
-			self->logger.log(LOGERR, " mysql_stmt_bind_param() failed");
-			self->logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
-		}
+		//if (param_count != 1) /* validate parameter count */
+		//{
+		//	self->logger.log(LOGERR, " invalid parameter count returned by MySQL");
+		//}
 
-		strncpy_s(str_data, deallocateParams->campaign_id, 100); /* string  */
-		str_length = strlen(str_data);
+		//memset(bind, 0, sizeof(bind));
+
+		///* STRING PARAM */
+		///* This is a number type, so there is no need
+		//to specify buffer_length */
+		//bind[0].buffer_type = MYSQL_TYPE_STRING;
+		//bind[0].buffer = (char*)str_data;
+		//bind[0].buffer_length = 1024;
+		//bind[0].is_null = 0;
+		//bind[0].length = &str_length;
+
+		//if (mysql_stmt_bind_param(stmt, bind))
+		//{
+		//	self->logger.log(LOGERR, " mysql_stmt_bind_param() failed");
+		//	self->logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+		//}
+
+		//strncpy_s(str_data, deallocateParams->campaign_id, 100); /* string  */
+		//str_length = strlen(str_data);
 
 
-		if (mysql_stmt_execute(stmt))
-		{
-			self->logger.log(LOGERR, " mysql_stmt_execute(), 1 failed");
-			self->logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
-		}
-		mysql_stmt_close(stmt);
+		//if (mysql_stmt_execute(stmt))
+		//{
+		//	self->logger.log(LOGERR, " mysql_stmt_execute(), 1 failed");
+		//	self->logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
+		//}
+		//mysql_stmt_close(stmt);
+
 		if (self->connCallProc != NULL)
 		{
 			mysql_close(self->connCallProc);
@@ -1042,13 +1053,12 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 }
 
 //Update ph number status in table...
-BOOL CSpiceOBDDlg::UpdatePhNumbersStatus(int ch)
+BOOL CSpiceOBDDlg::UpdatePhNumbersStatus(const char* campaignId, const char* encryptedAni)
 {
 	char queryStr[1024];
 
-	sprintf_s(queryStr, "update tbl_outdialer_base set status = 1 where campaign_id = '%s' and ani = '%s'",
-		Campaigns.at(ChInfo[ch].CampaignID).campaign_id, ChInfo[ch].CDRStatus.encrypted_ani);
-	logger.log(LOGINFO, "update query for phone number: %s, Encrypted Ani: %s, Channel Num:%d", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.encrypted_ani, ch);
+	sprintf_s(queryStr, "update tbl_outdialer_base set status = 1 where campaign_id = '%s' and ani = '%s'", campaignId, encryptedAni);
+	logger.log(LOGINFO, "UpdatePhNumbersStatus query string: %s", queryStr);
 	int query_state = mysql_query(connUpdate, queryStr);
 
 	if (query_state != 0)
@@ -1062,8 +1072,7 @@ BOOL CSpiceOBDDlg::UpdatePhNumbersStatus(int ch)
 	}
 	else
 	{
-		sprintf_s(queryStr, "update tbl_outdialer_base set status = 1 where ani = '%s'",
-			ChInfo[ch].CDRStatus.encrypted_ani);
+		sprintf_s(queryStr, "update tbl_outdialer_base set status = 1 where ani = '%s'", encryptedAni);
 		//logger.log(LOGINFO, "update query for phone number: %s, Encrypted Ani: %s, Channel Num:%d", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.encrypted_ani, ch);
 		int query_state = mysql_query(connUpdate, queryStr);
 
@@ -1077,7 +1086,6 @@ BOOL CSpiceOBDDlg::UpdatePhNumbersStatus(int ch)
 			return true;
 		}
 	}
-	logger.log(LOGERR, "UpdatePhNumbersStatus Number update failed: %s, query string: %s, channel Num: %d", ChInfo[ch].pPhoNumBuf, queryStr, ch);
 	return false;
 }
 
@@ -1619,11 +1627,11 @@ BOOL CSpiceOBDDlg::IsPhNumCalledSuccess(char* encrypted_ani)
 {
 	char phQuery[1024];
 	int phCount;
-	sprintf_s(phQuery, "select count(*) as countNum  from tbl_obd_calls where encrypted_ani ='%s' and reason = 'Answered' and date(call_date) = date(now())",
+	sprintf_s(phQuery, "select count(1) as countNum  from tbl_obd_calls where encrypted_ani ='%s' and reason = 'Answered' and date(call_date) = date(now())",
 		encrypted_ani);
 
 	int queryState = mysql_query(connSelect, phQuery);
-	logger.log(LOGINFO, ": %s", phQuery);
+	logger.log(LOGINFO, "IsPhNumCalledSuccess Query: %s", phQuery);
 	if (queryState != 0)
 	{
 		CString err(mysql_error(connSelect));
@@ -1698,14 +1706,20 @@ void CSpiceOBDDlg::DoUserWork()
 						{
 							Campaigns.at(tempCampId).phnumBuf.front().ani.insert(0, circleLrn);
 						}*/
-						/*if (IsPhNumCalledSuccess(Campaigns.at(tempCampId).phnumBuf.front().encryptedAni))
+						//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
+						char* tmpEncryptedAni = Campaigns.at(tempCampId).phnumBuf.front().encryptedAni;
+						if (!UpdatePhNumbersStatus(Campaigns.at(tempCampId).campaign_id, tmpEncryptedAni))
+						{
+							logger.log(LOGINFO, "DoUserWork Row not updated...ph number: %s, channel number: %d", tmpEncryptedAni, i);
+						}
+						if (IsPhNumCalledSuccess(tmpEncryptedAni))
 						{
 							Campaigns.at(tempCampId).phnumBuf.erase(Campaigns.at(tempCampId).phnumBuf.begin()); i--; continue;
-						}*/
-						std::string DecryptedVal = aesEncryption.DecodeAndDecrypt(Campaigns.at(tempCampId).phnumBuf.front().encryptedAni);
+						}
+						std::string DecryptedVal = aesEncryption.DecodeAndDecrypt(tmpEncryptedAni);
 						//StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(tempCampId).phnumBuf.front().ani.c_str());
 						StrCpyA(ChInfo[i].pPhoNumBuf, DecryptedVal.c_str());
-						StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(tempCampId).phnumBuf.front().encryptedAni);
+						StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, tmpEncryptedAni);
 						//delete Campaigns.at(tempCampId).phnumBuf.front().ani;
 						Campaigns.at(tempCampId).phnumBuf.erase(Campaigns.at(tempCampId).phnumBuf.begin());
 					}
@@ -1740,11 +1754,6 @@ void CSpiceOBDDlg::DoUserWork()
 					}
 					ChInfo[i].isAvailable = false;
 					logger.log(LOGINFO, "DoUserWork Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
-					//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
-					if (!UpdatePhNumbersStatus(i))
-					{
-						logger.log(LOGINFO, "DoUserWork Row not updated...ph number: %s, channel number: %d", ChInfo[i].pPhoNumBuf, i);
-					}
 				}
 				else
 				{
