@@ -119,8 +119,19 @@ typedef struct
 	char encryptedAni[31];
 }pnNumWithEncryptedAni;
 
+//typedef struct
+//{
+//	map<char ,char*> songCode;
+//	char patchDnis[31];
+//	char levelType[10];
+//	int cgLevel;
+//	int invalidKeyLevel;
+//	int noKeyLevel;
+//}songsRepeatLevelInfo;
+
 typedef struct
 {
+	//map<int, songsRepeatLevelInfo> tblSongsMaster;
 	vector<pnNumWithEncryptedAni> phnumBuf;
 	vector<std::string> cliList;
 	//char CLI[31];
@@ -217,6 +228,7 @@ public:
 	void InitilizeDBConnection();
 	void RefreshDBConnection(MYSQL* dbConn, const char* dbQuery);
 	BOOL GetDBData();
+	//void GetSongsMasterData(char* campaignId);
 	BOOL UpdateDBData();
 	void CloseDBConn();
 	BOOL InitilizeChannels();

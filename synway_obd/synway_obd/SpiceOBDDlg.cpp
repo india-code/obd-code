@@ -393,6 +393,12 @@ void CSpiceOBDDlg::RefreshDBConnection(MYSQL* dbConn, const char* dbQuery)
 	}
 }
 
+//void CSpiceOBDDlg::GetSongsMasterData(char* campaignId)
+//{
+//	char 
+//	select dtmf, repeat_level, promo_code, level_type, cg_level, no_key, invalid_key, getSecondDnis('kk_idea-KK4SPC_CP_PRE_SPORTS_772820170530195941') as DNIS from tbl_songs_master where campaign_id = 'kk_idea-KK4SPC_CP_PRE_SPORTS_772820170530195941' order by repeat_level
+//}
+
 
 BOOL CSpiceOBDDlg::GetDBData()
 {
@@ -528,9 +534,10 @@ BOOL CSpiceOBDDlg::GetDBData()
 			}
 			if ((Campaigns.at(campKey).phnumBuf.size() < (1 * Campaigns.at(campKey).channelsAllocated)))
 			{
+				//GetSongsMasterData(row[0]);
 				//Get out dialer numbers 5 times to the allocated channel numbers to the campaign
 				sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
-					row[0], 0, (2 * Campaigns.at(campKey).channelsAllocated));
+					row[0], 0, (5 * Campaigns.at(campKey).channelsAllocated));
 
 				logger.log(LOGINFO, queryStr);
 
@@ -1011,13 +1018,24 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			{
 				logger.log(LOGINFO, "Reason not updated...ph number: %s, encrypted ani: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani);
 			}
-			//Insert Call records in DB
-			sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_calls(channel, campaign_id, campaign_name, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id, retry_status ,song_name, patch_dnis) \
-				VALUES(%d, '%s', '%s', '%s', '%s', '%s', '%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s', '%d', '%s', '%s')",
-				ChInfo[i].CDRStatus.channel, Campaigns.at(tmpCmpId).campaign_id, Campaigns.at(tmpCmpId).campaign_name, circle, ChInfo[i].CDRStatus.ani, ChInfo[i].CDRStatus.cli, ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.answer_duration,
-				StrCmpA(ChInfo[i].CDRStatus.status, "SUCCESS") == 0 ? 1 : 0, ChInfo[i].CDRStatus.callPatch_duration, dateVal, call_time, answer_time, end_time, ChInfo[i].CDRStatus.reason_code,
-				ChInfo[i].CDRStatus.total_duration, ChInfo[i].CDRStatus.reason, ChInfo[i].CDRStatus.encrypted_ani, ChInfo[i].CDRStatus.ani, timeVal, Campaigns.at(tmpCmpId).curRetryCount, ChInfo[i].CDRStatus.songName, ChInfo[i].CDRStatus.DNISBuf);
 
+			if (StrCmpIA(ChInfo[i].CDRStatus.reason, "Answered"))
+			{
+				//Insert Call records in DB
+				sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_calls(channel, campaign_id, campaign_name, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id, retry_status ,song_name, patch_dnis) \
+				VALUES(%d, '%s', '%s', '%s', '%s', '%s', '%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s', '%d', '%s', '%s')",
+					ChInfo[i].CDRStatus.channel, Campaigns.at(tmpCmpId).campaign_id, Campaigns.at(tmpCmpId).campaign_name, circle, ChInfo[i].CDRStatus.ani, ChInfo[i].CDRStatus.cli, ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.answer_duration,
+					StrCmpA(ChInfo[i].CDRStatus.status, "SUCCESS") == 0 ? 1 : 0, ChInfo[i].CDRStatus.callPatch_duration, dateVal, call_time, answer_time, end_time, ChInfo[i].CDRStatus.reason_code,
+					ChInfo[i].CDRStatus.total_duration, ChInfo[i].CDRStatus.reason, ChInfo[i].CDRStatus.encrypted_ani, ChInfo[i].CDRStatus.ani, timeVal, Campaigns.at(tmpCmpId).curRetryCount, ChInfo[i].CDRStatus.songName, ChInfo[i].CDRStatus.DNISBuf);
+			}
+			else
+			{
+				sprintf_s(queryStrInsert, "INSERT INTO tbl_obd_answered_calls(channel, campaign_id, campaign_name, circle, ani, cli, dtmf, answer_duration, status, ring_duration, call_date, call_time, answer_time, end_time, reason_code,total_duration,reason,encrypted_ani, call_id, retry_status ,song_name, patch_dnis) \
+				VALUES(%d, '%s', '%s', '%s', '%s', '%s', '%s', %d, %d, %d, '%s', '%s', '%s', '%s', '%s', '%d', '%s','%s', '%s%s', '%d', '%s', '%s')",
+					ChInfo[i].CDRStatus.channel, Campaigns.at(tmpCmpId).campaign_id, Campaigns.at(tmpCmpId).campaign_name, circle, ChInfo[i].CDRStatus.ani, ChInfo[i].CDRStatus.cli, ChInfo[i].CDRStatus.dtmfBuf, ChInfo[i].CDRStatus.answer_duration,
+					StrCmpA(ChInfo[i].CDRStatus.status, "SUCCESS") == 0 ? 1 : 0, ChInfo[i].CDRStatus.callPatch_duration, dateVal, call_time, answer_time, end_time, ChInfo[i].CDRStatus.reason_code,
+					ChInfo[i].CDRStatus.total_duration, ChInfo[i].CDRStatus.reason, ChInfo[i].CDRStatus.encrypted_ani, ChInfo[i].CDRStatus.ani, timeVal, Campaigns.at(tmpCmpId).curRetryCount, ChInfo[i].CDRStatus.songName, ChInfo[i].CDRStatus.DNISBuf);
+			}
 			logger.log(LOGINFO, queryStrInsert);
 			query_state = mysql_query(connInsert, queryStrInsert);
 			if (query_state != 0)
@@ -1627,7 +1645,7 @@ BOOL CSpiceOBDDlg::IsPhNumCalledSuccess(char* encrypted_ani)
 {
 	char phQuery[1024];
 	int phCount;
-	sprintf_s(phQuery, "select count(1) as countNum  from tbl_obd_calls where encrypted_ani ='%s' and reason = 'Answered' and date(call_date) = date(now())",
+	sprintf_s(phQuery, "select count(1) as countNum  from tbl_obd_answered_calls where encrypted_ani ='%s' and reason = 'Answered' and date(call_date) = date(now())",
 		encrypted_ani);
 
 	int queryState = mysql_query(connSelect, phQuery);
@@ -1688,7 +1706,7 @@ void CSpiceOBDDlg::DoUserWork()
 				if (tempCampId != -1 && !Campaigns.at(tempCampId).phnumBuf.empty() && IsStartDialling && IsDailingTimeInRange && !isDeallocateProcedureCalled)
 				{
 					StrCpyA(ChInfo[i].CDRStatus.cli, Campaigns.at(tempCampId).cliList.at(rand() % Campaigns.at(tempCampId).cliList.size()).c_str());//picking random CLI
-																																					//Test call for each campaign
+					//Test call for each campaign
 					if (Campaigns.at(tempCampId).testCallflag && ++Campaigns.at(tempCampId).tmpCallCounter >= Campaigns.at(tempCampId).testCallCounter)
 					{
 						std::string DecryptedVal = aesEncryption.DecodeAndDecrypt(Campaigns.at(tempCampId).testCallNumber);
@@ -2152,12 +2170,16 @@ void CSpiceOBDDlg::DoUserWork()
 											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
 										}
-										else
+										else if(StrCmpIA(levelType, "service") == 0)
 										{
 											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
 											//StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
 											StrCatA(patchDNIS, Campaigns.at(tempCampId).first_consent_digit);
+										}
+										else
+										{
+											StrCpyA(patchDNIS, "");
 										}
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
