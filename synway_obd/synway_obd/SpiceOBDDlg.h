@@ -268,6 +268,7 @@ protected:
 	afx_msg void OnBnClickedSetWaitAnswerTime();
 	afx_msg void OnCbnSelchangeWaitAnswerList();
 	afx_msg HCURSOR OnQueryDragIcon();
+	afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
 	DECLARE_MESSAGE_MAP()
 public:
 	CListCtrl m_TrkChList;
@@ -283,4 +284,5 @@ public:
 	std::vector<int> waitTimeList;
 	CComboBox mWaitAnswerComboCtrl;
 	CButton mSetWaitAnswerTimeOutBtn;
+	CStatic mRetryAlertMsg;
 };
