@@ -288,12 +288,16 @@ UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 	char queryProc[1024];
 	char campaignId[100];
 
+	MYSQL_RES* resProc;
+	int status;
+
 	//char PROC_SAMPLE[1024];
 	isDeallocateProcedureCalled = true;
 	DeallocateProcParam * deallocateParams = (DeallocateProcParam*)deallocateProcParam;
 	CSpiceOBDDlg* self = deallocateParams->spiceDlg;
 	try
 	{
+		self->logger.log(LOGINFO, "CallProcedure function start campaign_id : %s", deallocateParams->campaign_id);
 		self->mRetryAlertMsg.SetWindowTextW(_T("RETRY IN PROGRESS..."));
 		self->connCallProc = mysql_init(NULL);
 
@@ -313,6 +317,29 @@ UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 			self->logger.log(LOGERR, "Procedure calling Mysql Error: %s", mysql_error(self->connCallProc));
 		}
 
+		do{
+			resProc = mysql_store_result(self->connCallProc);
+			if (resProc)
+			{
+				mysql_free_result(resProc);
+			}
+			else /* no result set or error */
+			{
+				if (mysql_field_count(self->connCallProc) == 0)
+				{
+					self->logger.log(LOGINFO, "%lld rows affected",	mysql_affected_rows(self->connCallProc));
+				}
+				else  /* some error occurred */
+				{
+					self->logger.log(LOGERR, "Could not retrieve result set");
+					break;
+				}
+			}
+			/* more results? -1 = no, >0 = error, 0 = yes (keep looping) */
+			if ((status = mysql_next_result(self->connCallProc)) > 0)
+				self->logger.log(LOGERR, "Could not execute statement");
+		} while (status == 0);
+		
 		//StrCpyA(PROC_SAMPLE, "CALL procDeallocateChannel(?)");
 
 		//self->logger.log(LOGINFO, "CallProcedure function start campaign_id : %s", deallocateParams->campaign_id);
