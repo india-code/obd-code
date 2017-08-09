@@ -16,6 +16,9 @@
 #define ROW_COUNT 20
 #endif // !1
 
+#ifndef COMMENTED_SECTION
+#define COMMENTED_SECTION 0
+#endif
 
 
 // CAboutDlg dialog used for App About
@@ -339,7 +342,8 @@ UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 			if ((status = mysql_next_result(self->connCallProc)) > 0)
 				self->logger.log(LOGERR, "Could not execute statement");
 		} while (status == 0);
-		
+
+#if COMMENTED_SECTION
 		//StrCpyA(PROC_SAMPLE, "CALL procDeallocateChannel(?)");
 
 		//self->logger.log(LOGINFO, "CallProcedure function start campaign_id : %s", deallocateParams->campaign_id);
@@ -387,7 +391,7 @@ UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 		//	self->logger.log(LOGERR, " %s", mysql_stmt_error(stmt));
 		//}
 		//mysql_stmt_close(stmt);
-
+#endif // COMMENTED_SECTION
 		if (self->connCallProc != NULL)
 		{
 			mysql_close(self->connCallProc);
@@ -610,6 +614,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 					CWinThread* procThread = AfxBeginThread(CallProcedure, new DeallocateProcParam{ this, Campaigns.at(campKey).campaign_id });
 				}
 			}
+#if COMMENTED_SECTION
 			//copying circle and zone to the global variables
 			/*if (!StrCmpA(circle, "") && !StrCmpA(zone, ""))
 			{
@@ -664,6 +669,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 			}*/
 
 			//}//End For
+#endif // COMMENTED_SECTION
 		}
 		mysql_free_result(res);
 		//logger.log(LOGINFO, "campaigns size 2: %d", Campaigns.size());
@@ -3122,8 +3128,8 @@ void CSpiceOBDDlg::OnBnClickedDiallingStart()
 	if (!IsTimerOn)
 	{
 		SetTimer(1000, 200, NULL);
-		map<int, CampaignData>().swap(Campaigns);
-		logger.log(LOGINFO, "campaigns size: %d", Campaigns.size());
+		/*map<int, CampaignData>().swap(Campaigns);
+		logger.log(LOGINFO, "campaigns size: %d", Campaigns.size());*/
 		IsTimerOn = true;
 		/*CloseDBConn();
 		InitilizeDBConnection();*/

@@ -16,6 +16,8 @@ enum LogLevel
 
 class CLogger {
 	int MinLogLevel;
+	//CMutex m_Mutex;
+	//CSingleLock singleLock; //uncomment if only required
 	//FILE *fp;
 	std::ofstream logFile;
 	char CurFilePath[256];
@@ -47,7 +49,7 @@ public:
 		time_value = TimeStr;
 		return Time;
 	}
-	CLogger()
+	CLogger()/*:singleLock(&m_Mutex)*/
 	{
 		openLoggerFile();
 	}
@@ -107,20 +109,24 @@ public:
 		char formatStr[2048];
 		//time_value = (char*)malloc(26 * sizeof(char));
 		getTime(time_value);
-		va_start(args, format);
-		switch (logger) {
-			//case 0:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value.c_str()); fprintf(fp, " Trace   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 0:if ((int)logger >= MinLogLevel) { vsprintf_s(formatStr, format, args); logFile << time_value.c_str() << " Trace   : " << formatStr <<std::endl; break; }
-		   //case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Debug   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-			//case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value.c_str()); fprintf(fp, " Info    : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 1:if ((int)logger >= MinLogLevel) { vsprintf_s(formatStr, format, args); logFile << time_value.c_str() << " Info   : " << formatStr << std::endl; break; }
-		   //case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Warning : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-			//case 2:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value.c_str()); fprintf(fp, " Error   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 2:if ((int)logger >= MinLogLevel) { vsprintf_s(formatStr, format, args); logFile << time_value.c_str() << " Error   : " << formatStr << std::endl; break; }
-			//case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value.c_str()); fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
-		case 3:if ((int)logger >= MinLogLevel) { vsprintf_s(formatStr, format, args); logFile << time_value.c_str() << " Fatal   : " << formatStr << std::endl; break; }
-		}
-		va_end(args);
+		//if (singleLock.Lock(100)) //In the worst case wait for 100 ms only
+		//{
+			va_start(args, format);
+			switch (logger) {
+				//case 0:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value.c_str()); fprintf(fp, " Trace   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 0:if ((int)logger >= MinLogLevel) { vsprintf_s(formatStr, format, args); logFile << time_value.c_str() << " Trace   : " << formatStr << std::endl; break; }
+				   //case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Debug   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+					//case 1:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value.c_str()); fprintf(fp, " Info    : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 1:if ((int)logger >= MinLogLevel) { vsprintf_s(formatStr, format, args); logFile << time_value.c_str() << " Info   : " << formatStr << std::endl; break; }
+				   //case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value); fprintf(fp, " Warning : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+					//case 2:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value.c_str()); fprintf(fp, " Error   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 2:if ((int)logger >= MinLogLevel) { vsprintf_s(formatStr, format, args); logFile << time_value.c_str() << " Error   : " << formatStr << std::endl; break; }
+				   //case 3:if ((int)logger >= MinLogLevel) { fprintf(fp, time_value.c_str()); fprintf(fp, " Fatal   : "); vfprintf(fp, format, args); fprintf(fp, "\n"); break; }
+			case 3:if ((int)logger >= MinLogLevel) { vsprintf_s(formatStr, format, args); logFile << time_value.c_str() << " Fatal   : " << formatStr << std::endl; break; }
+			}
+			va_end(args);
+			//singleLock.Unlock();
+		//}
 		if (logFile.tellp() >= 10000000*5)
 		{
 			//fclose(fp);
