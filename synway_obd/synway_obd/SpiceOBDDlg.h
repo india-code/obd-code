@@ -279,6 +279,7 @@ public:
 	static CStatic cgValCtrl;
 	static CStatic totalChannelsAvlCtrl;
 	static CStatic nChDownCtrl;
+	static CStatic mChDownRangeVal;
 	std::string waitTimeListStr;
 	char curWaitTimeOutStr[20];
 	std::vector<int> waitTimeList;

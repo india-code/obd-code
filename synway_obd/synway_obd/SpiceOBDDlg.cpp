@@ -74,6 +74,7 @@ CStatic CSpiceOBDDlg::connctedValCtrl;
 CStatic CSpiceOBDDlg::cgValCtrl;
 CStatic CSpiceOBDDlg::nChDownCtrl;
 CStatic CSpiceOBDDlg::totalChannelsAvlCtrl;
+CStatic CSpiceOBDDlg::mChDownRangeVal;
 
 void CSpiceOBDDlg::DoDataExchange(CDataExchange* pDX)
 {
@@ -88,6 +89,7 @@ void CSpiceOBDDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_WAIT_ANSWER_LIST, mWaitAnswerComboCtrl);
 	DDX_Control(pDX, IDC_SET_WAIT_ANSWER_TIME, mSetWaitAnswerTimeOutBtn);
 	DDX_Control(pDX, IDC_RETRY_ALERT, mRetryAlertMsg);
+	DDX_Control(pDX, IDC_CHDOWN_RANGE, mChDownRangeVal);
 }
 
 BEGIN_MESSAGE_MAP(CSpiceOBDDlg, CDialogEx)
@@ -1551,6 +1553,7 @@ char* CSpiceOBDDlg::GetReleaseErrorReason(WORD errorCode)
 UINT CSpiceOBDDlg::SetChannelsStateCount(LPVOID  chCount)
 {
 	int totCount = SsmGetMaxCh();
+	vector<int> downChannels;
 	if (totCount > 0)
 	{
 		CString totChstr;
@@ -1562,8 +1565,13 @@ UINT CSpiceOBDDlg::SetChannelsStateCount(LPVOID  chCount)
 	while (true)
 	{
 		Sleep(2000);
+
 		int callsDialling = 0, callsConnected = 0, callsPatchedUp = 0, channelsDown = 0;
-		CString DailStr, ConnStr, CgStr, chDownStr;
+		CString DailStr, ConnStr, CgStr, chDownStr, downChannelsStr("Range: (");
+		int start, end;  // track start and end
+
+		vector<int>().swap(downChannels);
+
 		for (int i = 0; i < chnlCount->nTotalCh; i++)
 		{
 			int chState = SsmGetChState(i);
@@ -1584,6 +1592,7 @@ UINT CSpiceOBDDlg::SetChannelsStateCount(LPVOID  chCount)
 			}
 			else if (chState == S_CALL_UNAVAILABLE || chState == S_ISUP_RemotelyBlocked || chState == S_ISUP_WaitReset)
 			{
+				downChannels.push_back(i);
 				channelsDown++;
 			}
 		}
@@ -1599,6 +1608,36 @@ UINT CSpiceOBDDlg::SetChannelsStateCount(LPVOID  chCount)
 
 		chDownStr.Format(_T("%d"), channelsDown);
 		nChDownCtrl.SetWindowTextW(chDownStr);
+
+		if (channelsDown > 0) //show vector element in groups
+		{
+			end = start = downChannels[0];
+			for (int i = 1; i < downChannels.size(); i++)
+			{
+				// as long as entries are consecutive, move end forward
+				if (downChannels[i] == (downChannels[i - 1] + 1))
+				{
+					end = downChannels[i];
+				}
+				else
+				{
+					// when no longer consecutive, add group to result
+					if (start == end)
+						downChannelsStr.AppendFormat(_T("%d, "), start);
+					else
+						downChannelsStr.AppendFormat(_T("%d-%d, "), start, end);
+
+					start = end = downChannels[i];
+				}
+			}
+			// handle the final group
+			if (start == end)
+				downChannelsStr.AppendFormat(_T("%d)"), start);
+			else
+				downChannelsStr.AppendFormat(_T("%d-%d)"), start, end);
+
+			mChDownRangeVal.SetWindowTextW(downChannelsStr);
+		}
 	}
 }
 
@@ -2899,7 +2938,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 			//Extracting cg channels range from cgport column
 			nIVRMinCh = atoi(cgports.substr(0, cgports.find("-")).c_str());
 			nIVRMaxCh = atoi(cgports.substr(cgports.find("-") + 1, cgports.length() - 1).c_str());
-
+			if (nIVRMaxCh == 0) nIVRMaxCh = -1; //there is no cg port allocated.
 			nTotalCh = totalch + (nIVRMaxCh - nIVRMinCh) + 1;
 			int totalChannelsAvailable = SsmGetMaxCh(); //maximum channels available. 
 
