@@ -1255,7 +1255,7 @@ void CSpiceOBDDlg::CloseDBConn()
 
 void CSpiceOBDDlg::InitUserDialingList()
 {
-	static int ColumnWidth[7] = { 50, 220, 50, 150, 210, 100 ,348 }; //earlier it was: { 200, 200, 200, 150, 150, 200 ,250 }
+	static int ColumnWidth[7] = { 50, 150, 50, 100, 160, 80 ,650 }; //earlier it was: { 50, 50, 50, 200, 200, 50 ,750 };
 	LV_COLUMN lvc;
 	lvc.mask = LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM;
 
@@ -1634,6 +1634,10 @@ UINT CSpiceOBDDlg::SetChannelsStateCount(LPVOID  chCount)
 				downChannelsStr.AppendFormat(_T("%d-%d)"), start, end);
 
 			mChDownRangeVal.SetWindowTextW(downChannelsStr);
+		}
+		else
+		{
+			mChDownRangeVal.SetWindowTextW(L"");
 		}
 	}
 }
