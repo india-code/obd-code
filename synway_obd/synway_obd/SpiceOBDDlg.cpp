@@ -144,7 +144,7 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 									// TODO: Add extra initialization here
 	try {
 		logger.SetMinLogLevel(m_SetMinLogLevel); //Set initial minimum log level
-		if (!InitCtiBoard())  return false;
+		
 		m_TrkChList.SetExtendedStyle(LVS_EX_GRIDLINES | LVS_EX_FULLROWSELECT);
 		CRect rect;
 		SystemParametersInfo(SPI_GETWORKAREA, 0, &rect, 0);
@@ -153,9 +153,8 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 		SetDiallingStartStopBtn(true);
 		::SetWindowPos(m_hWnd, HWND_TOPMOST, 0, 0, screen_x_size, screen_y_size, SWP_NOZORDER);
 
-		InitilizeDBConnection();
-		if (!InitilizeChannels()) return false;
-		InitUserDialingList();
+		SetTimer(INITIALIZE_CTRL, 2 * 1000, NULL);
+
 	}
 	catch (...)
 	{
@@ -168,13 +167,11 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 	}
 	//GetDBData();
 	//SetTimer(1000, 200, NULL);
-	IsTimerOn = false;
-	OnBnClickedDiallingStart();
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
 
-/*** Initilizes DB connection ***/
-void CSpiceOBDDlg::InitilizeDBConnection()
+/*** Initializes DB connection ***/
+void CSpiceOBDDlg::InitializeDBConnection()
 {
 	conn = mysql_init(NULL);
 	connBase = mysql_init(NULL);
@@ -1258,7 +1255,7 @@ void CSpiceOBDDlg::CloseDBConn()
 
 void CSpiceOBDDlg::InitUserDialingList()
 {
-	static int ColumnWidth[7] = { 50, 50, 50, 200, 200, 50 ,750 }; //earlier it was: { 200, 200, 200, 150, 150, 200 ,250 }
+	static int ColumnWidth[7] = { 50, 220, 50, 150, 210, 100 ,348 }; //earlier it was: { 200, 200, 200, 150, 150, 200 ,250 }
 	LV_COLUMN lvc;
 	lvc.mask = LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM;
 
@@ -1783,7 +1780,7 @@ void CSpiceOBDDlg::DoUserWork()
 		{
 		case USER_IDLE:
 			ChInfo[i].lineState = SsmGetChState(i);
-			//ChInfo[i].DTCounter = 0;//Initilize iteration counters...
+			//ChInfo[i].DTCounter = 0;//Initialize iteration counters...
 			ChInfo[i].levelNumber = 1;
 			if (ChInfo[i].lineState == S_CALL_STANDBY && ChInfo[i].EnCalled == false)
 			{
@@ -2807,7 +2804,7 @@ BOOL CSpiceOBDDlg::InitCtiBoard()
 		PostQuitMessage(0);
 		return false;
 	}
-	//AfxMessageBox(L"Card Initilized !!");
+	//AfxMessageBox(L"Card Initialized !!");
 	return true;
 }
 
@@ -2911,12 +2908,12 @@ void CSpiceOBDDlg::WriteToINIFile(const char* key, const char* value)
 	WritePrivateProfileStringA("Database", key, value, curDirectory);
 }
 
-BOOL CSpiceOBDDlg::InitilizeChannels()
+BOOL CSpiceOBDDlg::InitializeChannels()
 {
 	try {
 		//ReadNumbersFromFiles();
-		Sleep(5*1000); //wait for 5 seconds initially.
-						 //get total ports and cg ports and campaign wise distribution
+		Sleep(2 * 1000); //wait for 2 seconds initially.
+		//get total ports and cg ports and campaign wise distribution
 		char queryStr[256];
 		sprintf_s(queryStr, "select total_ports, cgport, circle_lrn from tbl_port_manager where circle = '%s'", circle);
 		logger.log(LOGINFO, "Select ports query:  %s", queryStr);
@@ -3011,7 +3008,7 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 				int chType = SsmGetChType(i);
 				if (chType == 11) //ISUP channel(China SS7 signaling ISUP)
 				{
-					if (SsmGetChState(i) == 0) //check idle
+					if (SsmGetChState(i) == S_CALL_STANDBY) //check idle
 					{
 						ChInfo[i].nStep = USER_IDLE;
 					}
@@ -3054,10 +3051,10 @@ BOOL CSpiceOBDDlg::InitilizeChannels()
 							StrCpyA(ChInfo[i].pPhoNumBuf, Campaigns.at(j).phnumBuf.front().ani);
 							StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, Campaigns.at(j).phnumBuf.front().encryptedAni);
 							Campaigns.at(j).phnumBuf.erase(Campaigns.at(j).phnumBuf.begin());
-							logger.log(LOGINFO, "InitilizeChannels Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
+							logger.log(LOGINFO, "InitializeChannels Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
 							if (!UpdatePhNumbersStatus(i))
 							{
-							logger.log(LOGINFO, "InitilizeChannels Row not updated... channel number: %d", i);
+							logger.log(LOGINFO, "InitializeChannels Row not updated... channel number: %d", i);
 							}
 							}*/
 							//setting caller ID 
@@ -3097,36 +3094,55 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 	try
 	{
 		logger.log(LOGINFO, "On Timer Start");
-		//Number should be dialled only between 8AM IST to 8:50 PM IST 
-		//char dateVal[25];
-		tm dateTime = logger.getTime(std::string());
-		if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 9 || dateTime.tm_hour >= 21)
+		if (nIDEvent == LOOP_CTRL)
 		{
-			IsDailingTimeInRange = false;
-			BOOL isAllChannelsCleared = true;
-			for (size_t campKey = 1; campKey <= Campaigns.size(); campKey++)
+			//Number should be dialled only between 8AM IST to 8:50 PM IST 
+			//char dateVal[25];
+			tm dateTime = logger.getTime(std::string());
+			if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 9 || dateTime.tm_hour >= 21)
 			{
-				if (!isCampaignChannelsCleared(campKey))
+				IsDailingTimeInRange = false;
+				BOOL isAllChannelsCleared = true;
+				for (size_t campKey = 1; campKey <= Campaigns.size(); campKey++)
 				{
-					isAllChannelsCleared = false;
-					break;
+					if (!isCampaignChannelsCleared(campKey))
+					{
+						isAllChannelsCleared = false;
+						break;
+					}
 				}
+				if (IsTimerOn && isAllChannelsCleared)
+				{
+					OnBnClickedDiallingStop();
+					KillTimer(nIDEvent);
+					IsTimerOn = false;
+					map<int, CampaignData>().swap(Campaigns); //Clear all data
+				}
+				//logger.log(LOGINFO, "Dailling false hour: %d, Minute : %d", dateTime.tm_hour, dateTime.tm_min);
 			}
-			if (IsTimerOn && isAllChannelsCleared)
+			else
 			{
-				OnBnClickedDiallingStop();
-				KillTimer(1000);
-				IsTimerOn = false;
+				IsDailingTimeInRange = true;
+				//logger.log(LOGINFO, "Dailling true hour: %d, Minute : %d", dateTime.tm_hour, dateTime.tm_min);
 			}
-			//logger.log(LOGINFO, "Dailling false hour: %d, Minute : %d", dateTime.tm_hour, dateTime.tm_min);
+			DoUserWork();
+			UpDateATrunkChListCtrl();
 		}
-		else
+		else if (nIDEvent == INITIALIZE_CTRL)
 		{
-			IsDailingTimeInRange = true;
-			//logger.log(LOGINFO, "Dailling true hour: %d, Minute : %d", dateTime.tm_hour, dateTime.tm_min);
+			KillTimer(nIDEvent);
+			logger.log(LOGINFO, "Controls Initialization start.");
+			BeginWaitCursor(); //Set wait cursor
+			if (!InitCtiBoard())  return;
+			InitializeDBConnection();
+			if (!InitializeChannels()) return;
+			InitUserDialingList();
+			BringWindowToTop();
+			EndWaitCursor(); //Reset wait cursor.
+			logger.log(LOGINFO, "Controls Initialized.");
+			IsTimerOn = false;
+			OnBnClickedDiallingStart();
 		}
-		DoUserWork();
-		UpDateATrunkChListCtrl();
 		logger.log(LOGINFO, "On Timer End");
 	}
 	catch (...)
@@ -3166,12 +3182,12 @@ void CSpiceOBDDlg::OnBnClickedDiallingStart()
 	SetDiallingStartStopBtn(false);
 	if (!IsTimerOn)
 	{
-		SetTimer(1000, 200, NULL);
+		SetTimer(LOOP_CTRL, 200, NULL);
 		/*map<int, CampaignData>().swap(Campaigns);
 		logger.log(LOGINFO, "campaigns size: %d", Campaigns.size());*/
 		IsTimerOn = true;
 		/*CloseDBConn();
-		InitilizeDBConnection();*/
+		InitializeDBConnection();*/
 	}
 }
 

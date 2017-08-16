@@ -26,9 +26,9 @@ enum APP_USER_STATE {
 	USER_WAIT_HANGUP
 };
 
-enum MEDIA_STATE {
-	MEDIA_IDLE,
-	MEDIA_PLAYING
+enum TIMER_ID {
+	INITIALIZE_CTRL = 1000,
+	LOOP_CTRL = 2000
 };
 
 enum OBD_DIAL_PLAN
@@ -49,6 +49,7 @@ enum DT_SERVICE_STATE
 	USER_CALL_PATCHUP,
 	USER_STOP_PLAYING
 };
+
 
 
 extern void getErrorResult(LPCTSTR  ApiName);
@@ -225,13 +226,13 @@ public:
 	void DoUserWork();
 	void SetChannelInitialStatus();
 	void InitUserDialingList();
-	void InitilizeDBConnection();
+	void InitializeDBConnection();
 	void RefreshDBConnection(MYSQL* dbConn, const char* dbQuery);
 	BOOL GetDBData();
 	//void GetSongsMasterData(char* campaignId);
 	BOOL UpdateDBData();
 	void CloseDBConn();
-	BOOL InitilizeChannels();
+	BOOL InitializeChannels();
 	void LogErrorCodeAndMessage(int ch);
 	void UpDateATrunkChListCtrl();
 	void GetNextUserData();
