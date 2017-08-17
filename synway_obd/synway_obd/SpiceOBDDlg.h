@@ -37,7 +37,8 @@ enum OBD_DIAL_PLAN
 	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
 	//AcquisitionalOBDWithout1stConsent,
 	AcquisitionalOBDWith1stConsent, /*1: welcome, 2: No input again, 3: Thanks 4: wrong*/
-	AcquisitionalOBDWithIVRServiceCrossPromo /*Promprs Index are as 1-99 product prompts , welcome - 100, idea jingle - 200, invalid input - 300, no input - 400, thanks - 500 */	
+	AcquisitionalOBDWithIVRServiceCrossPromo, /*Promprs Index are as 1-99 product prompts , welcome - 100, idea jingle - 200, invalid input - 300, no input - 400, thanks - 500 */
+	MissedCallAlert
 };
 
 //different states during dt and service 
@@ -287,4 +288,7 @@ public:
 	CComboBox mWaitAnswerComboCtrl;
 	CButton mSetWaitAnswerTimeOutBtn;
 	CStatic mRetryAlertMsg;
+	afx_msg void OnBnClickedRingDurationBtn();
+	CEdit mRingDurationCtrl;
+	int mRingDurationVal;
 };

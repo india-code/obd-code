@@ -59,7 +59,7 @@ END_MESSAGE_MAP()
 
 CSpiceOBDDlg::CSpiceOBDDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_SYNWAY_OBD_DIALOG, pParent)
-	, m_SetMinLogLevel(0), aesEncryption("1234567891011121")
+	, m_SetMinLogLevel(0), aesEncryption("1234567891011121"), mRingDurationVal(1)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -90,6 +90,7 @@ void CSpiceOBDDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_SET_WAIT_ANSWER_TIME, mSetWaitAnswerTimeOutBtn);
 	DDX_Control(pDX, IDC_RETRY_ALERT, mRetryAlertMsg);
 	DDX_Control(pDX, IDC_CHDOWN_RANGE, mChDownRangeVal);
+	DDX_Control(pDX, IDC_RING_DURATION, mRingDurationCtrl);
 }
 
 BEGIN_MESSAGE_MAP(CSpiceOBDDlg, CDialogEx)
@@ -107,6 +108,7 @@ BEGIN_MESSAGE_MAP(CSpiceOBDDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_SET_WAIT_ANSWER_TIME, &CSpiceOBDDlg::OnBnClickedSetWaitAnswerTime)
 	ON_CBN_SELCHANGE(IDC_WAIT_ANSWER_LIST, &CSpiceOBDDlg::OnCbnSelchangeWaitAnswerList)
 	ON_WM_CTLCOLOR()
+	ON_BN_CLICKED(IDC_RING_DURATION_BTN, &CSpiceOBDDlg::OnBnClickedRingDurationBtn)
 END_MESSAGE_MAP()
 
 
@@ -144,7 +146,7 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 									// TODO: Add extra initialization here
 	try {
 		logger.SetMinLogLevel(m_SetMinLogLevel); //Set initial minimum log level
-		
+
 		m_TrkChList.SetExtendedStyle(LVS_EX_GRIDLINES | LVS_EX_FULLROWSELECT);
 		CRect rect;
 		SystemParametersInfo(SPI_GETWORKAREA, 0, &rect, 0);
@@ -154,7 +156,10 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 		::SetWindowPos(m_hWnd, HWND_TOPMOST, 0, 0, screen_x_size, screen_y_size, SWP_NOZORDER);
 
 		SetTimer(INITIALIZE_CTRL, 2 * 1000, NULL);
-
+		//Set ring Duration initial value on GUI
+		CString mRingDurationStr;
+		mRingDurationStr.Format(L"%d", mRingDurationVal);
+		mRingDurationCtrl.SetWindowTextW(mRingDurationStr);
 	}
 	catch (...)
 	{
@@ -329,7 +334,7 @@ UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 			{
 				if (mysql_field_count(self->connCallProc) == 0)
 				{
-					self->logger.log(LOGINFO, "%lld rows affected",	mysql_affected_rows(self->connCallProc));
+					self->logger.log(LOGINFO, "%lld rows affected",mysql_affected_rows(self->connCallProc));
 				}
 				else  /* some error occurred */
 				{
@@ -1869,7 +1874,13 @@ void CSpiceOBDDlg::DoUserWork()
 					m_TrkChList.SetItemText(i, 5, L"");
 				}
 				if (StrCmpA(ChInfo[i].pPhoNumBuf, "") == 0) continue;
-				//SsmClearRxDtmfBuf(i);
+
+				//Special case for missed call alert.
+				if (Campaigns.at(tempCampId).obdDialPlan == MissedCallAlert)
+				{
+					SsmSetWaitAutoDialAnswerTimeEx(i, mRingDurationVal);
+					logger.log(LOGINFO, "Set ring duration called value: %d", mRingDurationVal);
+				}
 				if (SsmAutoDial(i, ChInfo[i].pPhoNumBuf) == 0) // making call
 				{
 					ChInfo[i].nStep = USER_WAIT_REMOTE_PICKUP;
@@ -2256,7 +2267,7 @@ void CSpiceOBDDlg::DoUserWork()
 											tmpDNIS.replace(tmpDNIS.find(tmpDTMF), tmpDTMF.length(), ChInfo[i].CDRStatus.dtmf);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
 										}
-										else if(StrCmpIA(levelType, "service") == 0)
+										else if (StrCmpIA(levelType, "service") == 0)
 										{
 											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
@@ -3247,4 +3258,18 @@ HBRUSH CSpiceOBDDlg::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 	}
 
 	return hbr;
+}
+
+
+void CSpiceOBDDlg::OnBnClickedRingDurationBtn()
+{
+	CString mRingDurationStr;
+	mRingDurationCtrl.GetWindowTextW(mRingDurationStr);
+	int oldvalue = mRingDurationVal;
+	mRingDurationVal = _wtoi(mRingDurationStr);
+	if (mRingDurationVal <= 0)
+	{
+		mRingDurationVal = oldvalue;
+		AfxMessageBox(L"Value must be greater than 0");
+	}
 }
