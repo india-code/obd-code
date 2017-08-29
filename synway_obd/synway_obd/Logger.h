@@ -21,6 +21,7 @@ class CLogger {
 	//FILE *fp;
 	std::ofstream logFile;
 	char CurFilePath[256];
+	char fileName[80];
 public:
 	tm getTime(std::string & time_value) {
 		struct tm                  Time;
@@ -53,48 +54,54 @@ public:
 	{
 		openLoggerFile();
 	}
-	void zipCurrentFile(char* fileName)
+	void zipCurrentFile()
 	{
 		HZIP hz;
-		char CurPath[256];
-		char folderName[50];
 		//char timeValue[25];
+		char zipFileName[256];
 
-		GetCurrentDirectoryA(200, CurPath);
-		StrCatA(CurPath, "\\ApplicationLogs");
-		if (!PathIsDirectoryA(CurPath))
-		{
-			CreateDirectoryA(CurPath, NULL);
-		}
-		tm timeVal = getTime(std::string());
-		sprintf_s(folderName, "\\Application_%04d%02d%02d", timeVal.tm_year + 1900, timeVal.tm_mon + 1, timeVal.tm_mday);
-		StrCatA(CurPath, folderName);
+		StrCpyA(zipFileName, CurFilePath);
+		
+		StrCatA(zipFileName, ".zip");
 
-		if (!PathIsDirectoryA(CurPath))
-		{
-			CreateDirectoryA(CurPath, NULL);
-		}
-		StrCatA(CurPath, "\\");
-		StrCatA(CurPath, fileName);
-		StrCatA(CurPath, ".zip");
 		CString fileNameW(fileName);
-		CString zipName(CurPath);
+		CString zipName(zipFileName);
+		CString zipPath(CurFilePath);
+
 		hz = CreateZip(zipName, 0);
 
-		ZipAdd(hz, fileNameW, fileNameW);
+		ZipAdd(hz, fileNameW, zipPath);
 
 		CloseZip(hz);
-		remove(fileName);
+		remove(CurFilePath);
 	}
 	void openLoggerFile()
 	{
-		char fileName[50];// , timeValue[25];
+		// , timeValue[25];
+		char folderName[50];
 
 		tm timeVal = getTime(std::string());
+		
+		GetCurrentDirectoryA(200, CurFilePath);
+		StrCatA(CurFilePath, "\\ApplicationLogs");
+		if (!PathIsDirectoryA(CurFilePath))
+		{
+			CreateDirectoryA(CurFilePath, NULL);
+		}
+
+		sprintf_s(folderName, "\\Application_%04d%02d%02d", timeVal.tm_year + 1900, timeVal.tm_mon + 1, timeVal.tm_mday);
+		StrCatA(CurFilePath, folderName);
+
+		if (!PathIsDirectoryA(CurFilePath))
+		{
+			CreateDirectoryA(CurFilePath, NULL);
+		}
+		StrCatA(CurFilePath, "\\");
+
 		sprintf_s(fileName, "Application_%02d%02d%02d.log", timeVal.tm_hour, timeVal.tm_min, timeVal.tm_sec);
-		StrCpyA(CurFilePath, fileName);
+		StrCatA(CurFilePath, fileName);
 		//fopen_s(&fp, fileName, "a+");
-		logFile.open(fileName, std::ofstream::app);
+		logFile.open(CurFilePath, std::ofstream::app);
 	}
 	void SetMinLogLevel(int minLogLevel)
 	{
@@ -131,7 +138,7 @@ public:
 		{
 			//fclose(fp);
 			logFile.close();
-			zipCurrentFile(CurFilePath);
+			zipCurrentFile();
 			openLoggerFile();
 		}
 		//fflush(fp);
@@ -143,6 +150,6 @@ public:
 		//log(LOGINFO, "Destructor called!!! %s", CurFilePath);
 		//fclose(fp);
 		logFile.close();
-		zipCurrentFile(CurFilePath);
+		zipCurrentFile();
 	}
 };

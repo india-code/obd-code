@@ -37,8 +37,7 @@ enum OBD_DIAL_PLAN
 	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
 	//AcquisitionalOBDWithout1stConsent,
 	AcquisitionalOBDWith1stConsent, /*1: welcome, 2: No input again, 3: Thanks 4: wrong*/
-	AcquisitionalOBDWithIVRServiceCrossPromo, /*Promprs Index are as 1-99 product prompts , welcome - 100, idea jingle - 200, invalid input - 300, no input - 400, thanks - 500 */
-	MissedCallAlert
+	AcquisitionalOBDWithIVRServiceCrossPromo /*Promprs Index are as 1-99 product prompts , welcome - 100, idea jingle - 200, invalid input - 300, no input - 400, thanks - 500 */
 };
 
 //different states during dt and service 
@@ -166,7 +165,7 @@ public:
 	WORD	nTotalCh;
 	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh;//, CGMaxCHNum;
 	char circle[20], circleLrn[5]; //, zone[20];
-	//Data stored in DBSettings.INI file
+								   //Data stored in DBSettings.INI file
 	char host[255];
 	char DBName[255];
 	char username[255];
@@ -275,7 +274,7 @@ protected:
 public:
 	CListCtrl m_TrkChList;
 	int m_SetMinLogLevel;
-	
+
 	static CStatic dailingValCtrl;
 	static CStatic connctedValCtrl;
 	static CStatic cgValCtrl;
@@ -288,7 +287,5 @@ public:
 	CComboBox mWaitAnswerComboCtrl;
 	CButton mSetWaitAnswerTimeOutBtn;
 	CStatic mRetryAlertMsg;
-	afx_msg void OnBnClickedRingDurationBtn();
-	CEdit mRingDurationCtrl;
-	int mRingDurationVal;
+	virtual BOOL PreTranslateMessage(MSG* pMsg);
 };

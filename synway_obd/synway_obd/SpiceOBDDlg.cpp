@@ -59,7 +59,7 @@ END_MESSAGE_MAP()
 
 CSpiceOBDDlg::CSpiceOBDDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_SYNWAY_OBD_DIALOG, pParent)
-	, m_SetMinLogLevel(0), aesEncryption("1234567891011121"), mRingDurationVal(1)
+	, m_SetMinLogLevel(0), aesEncryption("1234567891011121")
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -90,7 +90,6 @@ void CSpiceOBDDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_SET_WAIT_ANSWER_TIME, mSetWaitAnswerTimeOutBtn);
 	DDX_Control(pDX, IDC_RETRY_ALERT, mRetryAlertMsg);
 	DDX_Control(pDX, IDC_CHDOWN_RANGE, mChDownRangeVal);
-	DDX_Control(pDX, IDC_RING_DURATION, mRingDurationCtrl);
 }
 
 BEGIN_MESSAGE_MAP(CSpiceOBDDlg, CDialogEx)
@@ -108,7 +107,6 @@ BEGIN_MESSAGE_MAP(CSpiceOBDDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_SET_WAIT_ANSWER_TIME, &CSpiceOBDDlg::OnBnClickedSetWaitAnswerTime)
 	ON_CBN_SELCHANGE(IDC_WAIT_ANSWER_LIST, &CSpiceOBDDlg::OnCbnSelchangeWaitAnswerList)
 	ON_WM_CTLCOLOR()
-	ON_BN_CLICKED(IDC_RING_DURATION_BTN, &CSpiceOBDDlg::OnBnClickedRingDurationBtn)
 END_MESSAGE_MAP()
 
 
@@ -156,10 +154,7 @@ BOOL CSpiceOBDDlg::OnInitDialog()
 		::SetWindowPos(m_hWnd, HWND_TOPMOST, 0, 0, screen_x_size, screen_y_size, SWP_NOZORDER);
 
 		SetTimer(INITIALIZE_CTRL, 2 * 1000, NULL);
-		//Set ring Duration initial value on GUI
-		CString mRingDurationStr;
-		mRingDurationStr.Format(L"%d", mRingDurationVal);
-		mRingDurationCtrl.SetWindowTextW(mRingDurationStr);
+
 	}
 	catch (...)
 	{
@@ -324,7 +319,7 @@ UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 			self->logger.log(LOGERR, "Procedure calling Mysql Error: %s", mysql_error(self->connCallProc));
 		}
 
-		do{
+		do {
 			resProc = mysql_store_result(self->connCallProc);
 			if (resProc)
 			{
@@ -334,7 +329,7 @@ UINT CSpiceOBDDlg::CallProcedure(LPVOID deallocateProcParam)
 			{
 				if (mysql_field_count(self->connCallProc) == 0)
 				{
-					self->logger.log(LOGINFO, "%lld rows affected",mysql_affected_rows(self->connCallProc));
+					self->logger.log(LOGINFO, "%lld rows affected", mysql_affected_rows(self->connCallProc));
 				}
 				else  /* some error occurred */
 				{
@@ -588,11 +583,6 @@ BOOL CSpiceOBDDlg::GetDBData()
 					CString err(mysql_error(connBase));
 					AfxMessageBox(err);
 				}
-				/*while (!Campaigns.at(campKey).phnumBuf.empty())
-				{
-				delete Campaigns.at(campKey).phnumBuf.front().ani;
-				Campaigns.at(campKey).phnumBuf.erase(Campaigns.at(campKey).phnumBuf.begin());
-				}*/
 				MYSQL_RES * resPhBuf = mysql_store_result(connBase);
 				MYSQL_ROW rowPhBuf;
 				BOOL isCampaignCompleted = true;
@@ -882,7 +872,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 		nIndex++;
 	}
 
-	if (isDeallocateProcedureCalled)
+	if (isDeallocateProcedureCalled) //don't insert any record/update reason till base retry is completed. 
 		return;
 
 	if (IsUpdate)
@@ -1874,13 +1864,7 @@ void CSpiceOBDDlg::DoUserWork()
 					m_TrkChList.SetItemText(i, 5, L"");
 				}
 				if (StrCmpA(ChInfo[i].pPhoNumBuf, "") == 0) continue;
-
-				//Special case for missed call alert.
-				if (Campaigns.at(tempCampId).obdDialPlan == MissedCallAlert)
-				{
-					SsmSetWaitAutoDialAnswerTimeEx(i, mRingDurationVal);
-					logger.log(LOGINFO, "Set ring duration called value: %d", mRingDurationVal);
-				}
+				//SsmClearRxDtmfBuf(i);
 				if (SsmAutoDial(i, ChInfo[i].pPhoNumBuf) == 0) // making call
 				{
 					ChInfo[i].nStep = USER_WAIT_REMOTE_PICKUP;
@@ -2928,7 +2912,7 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 	try {
 		//ReadNumbersFromFiles();
 		Sleep(2 * 1000); //wait for 2 seconds initially.
-		//get total ports and cg ports and campaign wise distribution
+						 //get total ports and cg ports and campaign wise distribution
 		char queryStr[256];
 		sprintf_s(queryStr, "select total_ports, cgport, circle_lrn from tbl_port_manager where circle = '%s'", circle);
 		logger.log(LOGINFO, "Select ports query:  %s", queryStr);
@@ -3261,15 +3245,15 @@ HBRUSH CSpiceOBDDlg::OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor)
 }
 
 
-void CSpiceOBDDlg::OnBnClickedRingDurationBtn()
+BOOL CSpiceOBDDlg::PreTranslateMessage(MSG* pMsg)
 {
-	CString mRingDurationStr;
-	mRingDurationCtrl.GetWindowTextW(mRingDurationStr);
-	int oldvalue = mRingDurationVal;
-	mRingDurationVal = _wtoi(mRingDurationStr);
-	if (mRingDurationVal <= 0)
+	if (pMsg->message == WM_KEYDOWN)
 	{
-		mRingDurationVal = oldvalue;
-		AfxMessageBox(L"Value must be greater than 0");
+		if (pMsg->wParam == VK_RETURN || pMsg->wParam == VK_ESCAPE)
+		{
+			return TRUE;                // Do not process further
+		}
 	}
+
+	return CDialogEx::PreTranslateMessage(pMsg);
 }
