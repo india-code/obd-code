@@ -118,6 +118,7 @@ typedef struct
 {
 	//std::string ani;
 	char encryptedAni[31];
+	int priority;
 }pnNumWithEncryptedAni;
 
 //typedef struct
@@ -175,7 +176,8 @@ public:
 	CH_INFO* ChInfo;
 	CLogger logger;
 	//BOOL isReloadConfiguration;
-	static int OffSet, row_count, getAndUpdateRowCount;
+	static int OffSet, row_count;
+	static int loopCountForCampaignUpdate;
 	int mWaitDialAnswerTime;
 	AESEncryption aesEncryption;
 	bool IsUpdate;

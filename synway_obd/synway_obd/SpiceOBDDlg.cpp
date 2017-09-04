@@ -66,7 +66,7 @@ CSpiceOBDDlg::CSpiceOBDDlg(CWnd* pParent /*=NULL*/)
 
 int CSpiceOBDDlg::OffSet = ROW_COUNT;
 int CSpiceOBDDlg::row_count = ROW_COUNT;
-int CSpiceOBDDlg::getAndUpdateRowCount = 0;
+int CSpiceOBDDlg::loopCountForCampaignUpdate = 0;
 BOOL CSpiceOBDDlg::isDeallocateProcedureCalled = false;
 
 CStatic CSpiceOBDDlg::dailingValCtrl;
@@ -567,11 +567,11 @@ BOOL CSpiceOBDDlg::GetDBData()
 				campKey = Campaigns.size() + 1;
 				Campaigns.insert(pair<int, CampaignData>(campKey, tempdata));
 			}
-			if ((Campaigns.at(campKey).phnumBuf.size() < (1 * Campaigns.at(campKey).channelsAllocated)))
+			if ((Campaigns.at(campKey).phnumBuf.size() < (2 * Campaigns.at(campKey).channelsAllocated)))
 			{
 				//GetSongsMasterData(row[0]);
 				//Get out dialer numbers 5 times to the allocated channel numbers to the campaign
-				sprintf_s(queryStr, "select ani from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
+				sprintf_s(queryStr, "select ani, priority from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
 					row[0], 0, (5 * Campaigns.at(campKey).channelsAllocated));
 
 				logger.log(LOGINFO, queryStr);
@@ -593,7 +593,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 					size_t curIndex = Campaigns.at(campKey).phnumBuf.size();
 					//logger.log(LOGINFO, "Going for decryption of the string buffer:  %s size of campaigns is:%d", rowPhBuf[0], Campaigns.size());
 					//std::string DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
-					Campaigns.at(campKey).phnumBuf.push_back({/* DecryptedVal,*/ "" });
+					Campaigns.at(campKey).phnumBuf.push_back({/* DecryptedVal,*/ "", atoi(rowPhBuf[1])});
 					StrCpyA(Campaigns.at(campKey).phnumBuf.at(curIndex).encryptedAni, rowPhBuf[0]);
 					isCampaignCompleted = false;
 				}
@@ -889,7 +889,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	//	//{
 	//	if ((Campaigns.at(tmpCmpId).phnumBuf.size() <= (2 * Campaigns.at(tmpCmpId).channelsAllocated))/* && !Campaigns.at(tmpCmpId).hasReachedThreshold*/)
 	//	{
-	if (GetDBData())
+	if (++loopCountForCampaignUpdate >= 5 && GetDBData())
 	{
 		for (int ch = 0; ch < nTotalCh; ch++)
 		{
@@ -906,6 +906,7 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 			}
 			//logger.log(LOGINFO, "changed ch no: %d, campaign Id: %d", ch, ChInfo[ch].CampaignID);
 		}
+		loopCountForCampaignUpdate = 0;
 	}
 	////check if no more number to be dialed and all channels are free for specific campaign
 	//if (!Campaigns.at(tmpCmpId).isCampaignCompleted && Campaigns.at(tmpCmpId).phnumBuf.empty() && isCampaignChannelsCleared(tmpCmpId))
@@ -1807,11 +1808,12 @@ void CSpiceOBDDlg::DoUserWork()
 						}*/
 						//logger.log(LOGINFO, "UpdateStatusAndPickNextRecords vector current size: %d for campaign Id: %d", Campaigns.at(tmpCmpId).phnumBuf.size(), tmpCmpId);
 						char* tmpEncryptedAni = Campaigns.at(tempCampId).phnumBuf.front().encryptedAni;
+						int priority = Campaigns.at(tempCampId).phnumBuf.front().priority;
 						if (!UpdatePhNumbersStatus(Campaigns.at(tempCampId).campaign_id, tmpEncryptedAni))
 						{
 							logger.log(LOGINFO, "DoUserWork Row not updated...ph number: %s, channel number: %d", tmpEncryptedAni, i);
 						}
-						if (IsPhNumCalledSuccess(tmpEncryptedAni))
+						if (priority && IsPhNumCalledSuccess(tmpEncryptedAni))
 						{
 							Campaigns.at(tempCampId).phnumBuf.erase(Campaigns.at(tempCampId).phnumBuf.begin()); i--; continue;
 						}
@@ -2911,7 +2913,7 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 {
 	try {
 		//ReadNumbersFromFiles();
-		Sleep(2 * 1000); //wait for 2 seconds initially.
+		Sleep(5 * 1000); //wait for 5 seconds initially.
 						 //get total ports and cg ports and campaign wise distribution
 		char queryStr[256];
 		sprintf_s(queryStr, "select total_ports, cgport, circle_lrn from tbl_port_manager where circle = '%s'", circle);
