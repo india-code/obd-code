@@ -195,7 +195,7 @@ void CSpiceOBDDlg::InitializeDBConnection()
 	//Get wait dial answer tie out parameters
 	GetPrivateProfileStringA("Database", "waitdialtimerange", "30$40$50$", tmpWaitTimeListStr, 256, InitDBSettings);
 	GetPrivateProfileStringA("Database", "waitdialanswertimeout", "45", curWaitTimeOutStr, 20, InitDBSettings);
-
+	GetPrivateProfileStringA("Database", "contestch", "", contestChRange, 20, InitDBSettings);
 	port = GetPrivateProfileIntA("Database", "Port", 3306, InitDBSettings);
 	waitTimeListStr = tmpWaitTimeListStr;
 
@@ -1357,26 +1357,46 @@ HCURSOR CSpiceOBDDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-int CSpiceOBDDlg::GetAnIdleChannel() // Find an idle trunk channel for IVR call Patchup
+int CSpiceOBDDlg::GetAnIdleChannel(BOOL isContest) // Find an idle trunk channel for IVR call Patchup
 {
 	int i;
-	for (i = tempIVRMinCh; i <= nIVRMaxCh; i++)
+	//contestMinCh, contestMaxCh, tmpContestMinCh;
+	if (isContest)
 	{
-		if (SsmGetChState(i) == S_CALL_STANDBY)
+		for (i = tmpContestMinCh; i <= contestMaxCh; i++)
 		{
-			if (tempIVRMinCh < nIVRMaxCh - 1)
+			if (SsmGetChState(i) == S_CALL_STANDBY)
 			{
-				tempIVRMinCh++;
+				if (tmpContestMinCh < contestMaxCh - 1)
+				{
+					tmpContestMinCh++;
+				}
+				else
+				{
+					tmpContestMinCh = contestMinCh;
+				}
+				break;
 			}
-			else
-			{
-				tempIVRMinCh = nIVRMinCh;
-			}
-			break;
 		}
-		//if (!ChInfo[i].InUse) break;
 	}
-
+	else
+	{
+		for (i = tempIVRMinCh; i <= nIVRMaxChNew; i++)
+		{
+			if (SsmGetChState(i) == S_CALL_STANDBY)
+			{
+				if (tempIVRMinCh < nIVRMaxChNew - 1)
+				{
+					tempIVRMinCh++;
+				}
+				else
+				{
+					tempIVRMinCh = nIVRMinChNew;
+				}
+				break;
+			}
+		}
+	}
 	//if (i == nTotalCh) return -1;
 	return i;
 }
@@ -1748,6 +1768,50 @@ BOOL CSpiceOBDDlg::IsPhNumCalledSuccess(char* encrypted_ani)
 	if (phCount)return true;
 
 	return false;
+}
+
+void CSpiceOBDDlg::DialToIVR(int ch, BOOL isContest)
+{
+	SsmStopPlay(ch);
+	SsmClearRxDtmfBuf(ch);
+	ChInfo[ch].DtServiceState = USER_CALL_WAIT_PATCHUP;
+	//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
+	if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1)*/ PlayMediaFile(ch, 200) == -1)
+	{
+		LogErrorCodeAndMessage(ch);
+		HangupCall(ch);
+	}
+	//Set cli and DNIS for call patchedup
+	ChInfo[ch].IVRChannelNumber = GetAnIdleChannel(isContest);
+
+	SsmSetIsupFlag(ChInfo[ch].IVRChannelNumber, ISUP_CallerParam, 0x1303, 0); //set IAM for calling party number
+
+	if (SsmSetTxCallerId(ChInfo[ch].IVRChannelNumber, ChInfo[ch].pPhoNumBuf) == -1)
+	{
+		getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
+	}
+
+	CString cliStr(ChInfo[ch].pPhoNumBuf), dnisStr(ChInfo[ch].CDRStatus.DNIS), campNameStr(Campaigns.at(ChInfo[ch].CampaignID).campaign_name);
+	m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 1, campNameStr);
+	m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 3, cliStr);
+	m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 4, dnisStr);
+	//setting ISUP parameters
+	UCHAR IsupParamFCI[2];
+
+	IsupParamFCI[0] = 0x20;
+	IsupParamFCI[1] = 0x01;
+	SsmSetIsupParameter(ChInfo[ch].IVRChannelNumber, 0x01, 0x07, 2, IsupParamFCI); //forward call indicator
+
+	SsmSetIsupFlag(ChInfo[ch].IVRChannelNumber, ISUP_PhoNumParam, 0x1001, 0); //set IAM for called party number
+
+	if (SsmAutoDial(ChInfo[ch].IVRChannelNumber, ChInfo[ch].CDRStatus.DNIS) == -1)
+	{
+		LogErrorCodeAndMessage(ChInfo[ch].IVRChannelNumber);
+		HangupIVRCall(ChInfo[ch].IVRChannelNumber);
+		HangupCall(ch);
+	}
+	ChInfo[ChInfo[ch].IVRChannelNumber].InUse = true;
+	logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.DNIS);
 }
 
 void CSpiceOBDDlg::DoUserWork()
@@ -2227,23 +2291,6 @@ void CSpiceOBDDlg::DoUserWork()
 								//logger.log(LOGINFO, "song name: %s, song code : %s", songName, songCode);
 								if (StrCmpA(songCode, "")) //Right Input
 								{
-									SsmStopPlay(i);
-									SsmClearRxDtmfBuf(i);
-									ChInfo[i].DtServiceState = USER_CALL_WAIT_PATCHUP;
-									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1)*/ PlayMediaFile(i, 200) == -1)
-									{
-										LogErrorCodeAndMessage(i);
-										HangupCall(i);
-									}
-									ChInfo[i].IVRChannelNumber = GetAnIdleChannel();
-
-									SsmSetIsupFlag(ChInfo[i].IVRChannelNumber, ISUP_CallerParam, 0x1303, 0); //set IAM for calling party number
-
-									if (SsmSetTxCallerId(ChInfo[i].IVRChannelNumber, ChInfo[i].pPhoNumBuf) == -1)
-									{
-										getErrorResult(L"DoUserWork-> SsmSetTxCallerId call patchup IVR");
-									}
 									if (StrCmpA(levelType, "") && StrCmpA(patchDNIS, ""))
 									{
 										std::string tmpDNIS = patchDNIS;
@@ -2267,28 +2314,14 @@ void CSpiceOBDDlg::DoUserWork()
 										StrCatA(patchDNIS, songCode);
 										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
 									}
-									//Set cli and DNIS for call patchedup
-									CString cliStr(ChInfo[i].pPhoNumBuf), dnisStr(ChInfo[i].CDRStatus.DNIS), campNameStr(Campaigns.at(tempCampId).campaign_name);
-									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 1, campNameStr);
-									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 3, cliStr);
-									m_TrkChList.SetItemText(ChInfo[i].IVRChannelNumber, 4, dnisStr);
-									//setting ISUP parameters
-									UCHAR IsupParamFCI[2];
-
-									IsupParamFCI[0] = 0x20;
-									IsupParamFCI[1] = 0x01;
-									SsmSetIsupParameter(ChInfo[i].IVRChannelNumber, 0x01, 0x07, 2, IsupParamFCI); //forward call indicator
-
-									SsmSetIsupFlag(ChInfo[i].IVRChannelNumber, ISUP_PhoNumParam, 0x1001, 0); //set IAM for called party number
-
-									if (SsmAutoDial(ChInfo[i].IVRChannelNumber, ChInfo[i].CDRStatus.DNIS) == -1)
+									if (StrCmpIA(levelType, "skip") == 0) //check for skip first dtmf
 									{
-										LogErrorCodeAndMessage(ChInfo[i].IVRChannelNumber);
-										HangupIVRCall(ChInfo[i].IVRChannelNumber);
-										HangupCall(i);
+										DialToIVR(i, true);
 									}
-									ChInfo[ChInfo[i].IVRChannelNumber].InUse = true;
-									logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.DNIS);
+									else
+									{
+										DialToIVR(i, false);
+									}
 									ChInfo[i].levelNumber = jumpLevel;
 									//ChInfo[i].DTCounter = 0;
 									//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
@@ -2299,7 +2332,7 @@ void CSpiceOBDDlg::DoUserWork()
 									char songQuery[1024];
 									int queryState, invalidKeyLevel;
 
-									sprintf_s(songQuery, "select invalid_key from tbl_songs_master where campaign_id = '%s' and repeat_level = %d limit 1",
+									sprintf_s(songQuery, "select promo_code, level_type, invalid_key  from tbl_songs_master where campaign_id = '%s' and repeat_level = %d limit 1",
 										Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].levelNumber);
 
 									queryState = mysql_query(connSelect, songQuery);
@@ -2314,26 +2347,36 @@ void CSpiceOBDDlg::DoUserWork()
 									invalidKeyLevel = 1;
 									if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 									{
-										invalidKeyLevel = atoi(rowPromo[0]);
+										StrCpyA(songCode, rowPromo[0]);
+										StrCpyA(levelType, rowPromo[1]);
+										invalidKeyLevel = atoi(rowPromo[2]);
 									}
 									mysql_free_result(resPromo);
 									SsmClearRxDtmfBuf(i);
 
 									if (invalidKeyLevel)
 									{
-										SsmStopPlay(i);
-										ChInfo[i].DtServiceState = USER_PLAY_PRODUCT;
-										ChInfo[i].levelNumber = invalidKeyLevel;
-										int invalidKeyPrompt = 300;
-										if (invalidKeyLevel >= 100 && invalidKeyLevel < 200)
+										if (StrCmpIA(levelType, "skip") == 0) //check for skip first dtmf
 										{
-											invalidKeyPrompt = invalidKeyLevel;
+											StrCpyA(ChInfo[i].CDRStatus.DNIS, songCode);
+											DialToIVR(i, true);
 										}
-										//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-										if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1)*/PlayMediaFile(i, invalidKeyPrompt) == -1)
+										else
 										{
-											LogErrorCodeAndMessage(i);
-											HangupCall(i);
+											SsmStopPlay(i);
+											ChInfo[i].DtServiceState = USER_PLAY_PRODUCT;
+											ChInfo[i].levelNumber = invalidKeyLevel;
+											int invalidKeyPrompt = 300;
+											if (invalidKeyLevel >= 100 && invalidKeyLevel < 200)
+											{
+												invalidKeyPrompt = invalidKeyLevel;
+											}
+											//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
+											if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[6], -1, 0, -1)*/PlayMediaFile(i, invalidKeyPrompt) == -1)
+											{
+												LogErrorCodeAndMessage(i);
+												HangupCall(i);
+											}
 										}
 									}
 									else
@@ -2346,10 +2389,10 @@ void CSpiceOBDDlg::DoUserWork()
 							else  //No Input
 							{
 								//Fetch no input repeat level value.
-								char songQuery[1024];
+								char songQuery[1024], songCode[20], levelType[10];
 								int queryState, noKeyLevel;
 
-								sprintf_s(songQuery, "select no_key from tbl_songs_master where campaign_id = '%s' and repeat_level = %d limit 1",
+								sprintf_s(songQuery, "select promo_code, level_type, no_key from tbl_songs_master where campaign_id = '%s' and repeat_level = %d limit 1",
 									Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].levelNumber);
 
 								queryState = mysql_query(connSelect, songQuery);
@@ -2364,24 +2407,33 @@ void CSpiceOBDDlg::DoUserWork()
 								noKeyLevel = 2;
 								if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{
-									noKeyLevel = atoi(rowPromo[0]);
+									StrCpyA(songCode, rowPromo[0]);
+									StrCpyA(levelType, rowPromo[1]);
+									noKeyLevel = atoi(rowPromo[2]);
 								}
 								mysql_free_result(resPromo);
-
-								SsmStopPlay(i);
-								ChInfo[i].DtServiceState = USER_PLAY_PRODUCT;
-								ChInfo[i].levelNumber = noKeyLevel;
-
-								int noKeyPrompt = 400;
-								if (noKeyLevel >= 100 && noKeyLevel < 200)
+								if (StrCmpIA(levelType, "skip") == 0) //check for skip first dtmf
 								{
-									noKeyPrompt = noKeyLevel;
+									StrCpyA(ChInfo[i].CDRStatus.DNIS, songCode);
+									DialToIVR(i, true);
 								}
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-								if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1)*/PlayMediaFile(i, noKeyPrompt) == -1)
+								else
 								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
+									SsmStopPlay(i);
+									ChInfo[i].DtServiceState = USER_PLAY_PRODUCT;
+									ChInfo[i].levelNumber = noKeyLevel;
+
+									int noKeyPrompt = 400;
+									if (noKeyLevel >= 100 && noKeyLevel < 200)
+									{
+										noKeyPrompt = noKeyLevel;
+									}
+									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
+									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[7], -1, 0, -1)*/PlayMediaFile(i, noKeyPrompt) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
 								}
 								//int pnFormat; long pnTime;
 								//if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
@@ -2520,30 +2572,32 @@ void CSpiceOBDDlg::DoUserWork()
 					ChInfo[i].mediaState = SsmCheckPlay(i);
 					if (ChInfo[i].mediaState >= 1)
 					{
+						//Fetch no input repeat level value.
+						char songQuery[1024], levelType[10];
+						int queryState, noKeyLevel;
+
+						sprintf_s(songQuery, "select level_type, no_key from tbl_songs_master where campaign_id = '%s' and repeat_level = %d limit 1",
+							Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].levelNumber);
+
+						queryState = mysql_query(connSelect, songQuery);
+						logger.log(LOGINFO, "Song query for No Input: %s", songQuery);
+						if (queryState != 0)
+						{
+							CString err(mysql_error(connSelect));
+							AfxMessageBox(err);
+						}
+						MYSQL_RES *resPromo = mysql_store_result(connSelect);
+						MYSQL_ROW rowPromo;
+						noKeyLevel = 2;
+						if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
+						{
+							StrCpyA(levelType, rowPromo[0]);
+							noKeyLevel = atoi(rowPromo[1]);
+						}
+						mysql_free_result(resPromo);
+
 						if (ChInfo[i].levelNumber >= 100 && ChInfo[i].levelNumber < 200)
 						{
-							//Fetch no input repeat level value.
-							char songQuery[1024];
-							int queryState, noKeyLevel;
-
-							sprintf_s(songQuery, "select no_key from tbl_songs_master where campaign_id = '%s' and repeat_level = %d limit 1",
-								Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].levelNumber);
-
-							queryState = mysql_query(connSelect, songQuery);
-							logger.log(LOGINFO, "Song query for No Input: %s", songQuery);
-							if (queryState != 0)
-							{
-								CString err(mysql_error(connSelect));
-								AfxMessageBox(err);
-							}
-							MYSQL_RES *resPromo = mysql_store_result(connSelect);
-							MYSQL_ROW rowPromo;
-							noKeyLevel = 2;
-							if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
-							{
-								noKeyLevel = atoi(rowPromo[0]);
-							}
-							mysql_free_result(resPromo);
 							ChInfo[i].levelNumber = noKeyLevel;
 						}
 						SsmStopPlay(i);
@@ -2572,7 +2626,15 @@ void CSpiceOBDDlg::DoUserWork()
 							else
 							{
 								ChInfo[i].DtServiceState = USER_PLAYING_PRODUCT;
-								WORD wTimeOut = pnTime / 1000 + 5;
+								WORD wTimeOut;
+								if (StrCmpIA(levelType, "skip") == 0) //check for skip first dtmf
+								{
+									wTimeOut = pnTime / 1000;
+								}
+								else
+								{
+									wTimeOut = pnTime / 1000 + 5;
+								}
 								SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
 							}
 						}
@@ -2962,7 +3024,43 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 			blockedChannelsRange.push_back({ atoi(tmpStr.substr(0, tmpStr.find("-")).c_str()), atoi(tmpStr.substr(tmpStr.find("-") + 1, tmpStr.length() - 1).c_str()) });
 			blockedRange.erase(0, DollarPos + 1);
 		}
-
+		if (StrCmpA(contestChRange, "") == 0)
+		{
+			contestMinCh = contestMaxCh = 0;
+		}
+		else
+		{
+			const char* delim = "-#";
+			char *context;
+			char *chValueStr = strtok_s(contestChRange, delim, &context);
+			contestMinCh  = atoi(chValueStr);
+			if (chValueStr)
+			{
+				chValueStr = strtok_s(NULL, delim, &context);
+				contestMaxCh = atoi(chValueStr);
+			}
+		}
+		logger.log(LOGINFO, "contestMinCh: %d, contestMaxCh: %d", contestMinCh, contestMaxCh);
+		if (contestMaxCh)
+		{
+			if (contestMaxCh == nIVRMaxCh)
+			{
+				tempIVRMinCh = nIVRMinChNew = nIVRMinCh;
+				nIVRMaxChNew = contestMinCh - 1;
+			}
+			else
+			{
+				tempIVRMinCh = nIVRMinChNew = contestMaxCh + 1;
+				nIVRMaxChNew = nIVRMaxCh;
+			}
+			tmpContestMinCh = contestMinCh;
+		}
+		else
+		{
+			tempIVRMinCh = nIVRMinChNew = nIVRMinCh;
+			nIVRMaxChNew = nIVRMaxCh;
+		}
+		logger.log(LOGINFO, "nIVRMinChNew: %d, tempIVRMinCh: %d, nIVRMaxChNew: %d", nIVRMinChNew, tempIVRMinCh, nIVRMaxChNew);
 		//Extract the list of wait timeout values from string and put them in drop down.
 		while (!waitTimeListStr.empty())
 		{
@@ -3002,7 +3100,6 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 				ChInfo[i].EnCalled = false;
 				ChInfo[i].isChannelBlocked = IsChannelBlocked(i);
 				ChInfo[i].IVRChannelNumber = -1;
-				tempIVRMinCh = nIVRMinCh;
 				ChInfo[i].isIVRChannel = false;
 				ChInfo[i].isAvailable = true;
 				//ChInfo[i].rowTobeUpdated = false;

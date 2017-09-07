@@ -164,7 +164,8 @@ private:
 	void SetDiallingStartStopBtn(BOOL enableStart);
 public:
 	WORD	nTotalCh;
-	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh;//, CGMaxCHNum;
+	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh, nIVRMinChNew, nIVRMaxChNew;//, CGMaxCHNum;
+	int contestMinCh, contestMaxCh, tmpContestMinCh;
 	char circle[20], circleLrn[5]; //, zone[20];
 								   //Data stored in DBSettings.INI file
 	char host[255];
@@ -223,9 +224,10 @@ public:
 	int PlayMediaFile(int ch, int promptsNumber);
 	void ContinuePlayingPrompts(int ch);
 	BOOL isCampaignChannelsCleared(int campaignKey);
-	int GetAnIdleChannel();
+	int GetAnIdleChannel(BOOL isContest);
 	BOOL InitCtiBoard();
 	void DoUserWork();
+	void DialToIVR(int ch, BOOL isContest);
 	void SetChannelInitialStatus();
 	void InitUserDialingList();
 	void InitializeDBConnection();
@@ -284,7 +286,7 @@ public:
 	static CStatic nChDownCtrl;
 	static CStatic mChDownRangeVal;
 	std::string waitTimeListStr;
-	char curWaitTimeOutStr[20];
+	char curWaitTimeOutStr[20], contestChRange[20];
 	std::vector<int> waitTimeList;
 	CComboBox mWaitAnswerComboCtrl;
 	CButton mSetWaitAnswerTimeOutBtn;
