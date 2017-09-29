@@ -1369,7 +1369,7 @@ int CSpiceOBDDlg::GetAnIdleChannel(BOOL isContest) // Find an idle trunk channel
 			{
 				if (tmpContestMinCh < contestMaxCh - 1)
 				{
-					tmpContestMinCh++;
+					tmpContestMinCh = i + 1;
 				}
 				else
 				{
@@ -1387,7 +1387,7 @@ int CSpiceOBDDlg::GetAnIdleChannel(BOOL isContest) // Find an idle trunk channel
 			{
 				if (tempIVRMinCh < nIVRMaxChNew - 1)
 				{
-					tempIVRMinCh++;
+					tempIVRMinCh = i + 1;
 				}
 				else
 				{
@@ -1701,6 +1701,7 @@ int CSpiceOBDDlg::PlayMediaFile(int ch, int promptsNumber)
 	else
 	{
 		CString promptsFileName(tmpMediaFile);
+		logger.log(LOGERR, "%s file missing on path", tmpMediaPath);
 		promptsFileName.Append(_T(" Prompt Missing!!!"));
 		AfxMessageBox(promptsFileName);
 		PostQuitMessage(0);
@@ -3024,6 +3025,7 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 			blockedChannelsRange.push_back({ atoi(tmpStr.substr(0, tmpStr.find("-")).c_str()), atoi(tmpStr.substr(tmpStr.find("-") + 1, tmpStr.length() - 1).c_str()) });
 			blockedRange.erase(0, DollarPos + 1);
 		}
+		//Contest channel range distribution
 		if (StrCmpA(contestChRange, "") == 0)
 		{
 			contestMinCh = contestMaxCh = 0;
