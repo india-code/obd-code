@@ -11,7 +11,7 @@ public:
 		char Name[255];
 		PHOSTENT HostInfo;
 		wVersionRequested = MAKEWORD(1, 1);
-		char *IPAdd;
+		char *IPAdd = NULL;
 		if (WSAStartup(wVersionRequested, &wsaData) == 0)
 		{
 			if (gethostname(Name, sizeof(Name)) == 0)

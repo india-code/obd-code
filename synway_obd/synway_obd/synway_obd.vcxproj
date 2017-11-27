@@ -91,14 +91,15 @@
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
+      <Optimization>Full</Optimization>
       <PreprocessorDefinitions>WIN32;_WINDOWS;_DEBUG;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>C:\Program Files (x86)\Windows Kits\10\Include\10.0.10150.0\ucrt;C:\Program Files (x86)\MariaDB 10.0\include\mysql;C:\ShCti\api\Vc6.0\Inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Program Files (x86)\Windows Kits\10\Include\10.0.10150.0\ucrt;C:\Program Files (x86)\MariaDB 10.0\include\mysql;C:\ShCti\api\Vc6.0\Inc;$(SolutionDir)\curl;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>libmysql.lib;SHP_A3.lib;EfAesLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libmysql.lib;SHP_A3.lib;EfAesLib.lib;LIBCURL.LIB;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -191,6 +192,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AESEncryption.h" />
+    <ClInclude Include="ApiHttpURL.h" />
     <ClInclude Include="EfAes.H" />
     <ClInclude Include="EncodeDecode.h" />
     <ClInclude Include="Logger.h" />
@@ -204,6 +206,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AESEncryption.cpp" />
+    <ClCompile Include="ApiHttpURL.cpp" />
     <ClCompile Include="EncodeDecode.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

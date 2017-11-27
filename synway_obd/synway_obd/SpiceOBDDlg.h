@@ -12,6 +12,7 @@
 #include <map>
 #include <vector>
 #include <Shlwapi.h>
+#include "ApiHttpURL.h"
 #include "afxwin.h"
 
 using namespace std;
@@ -93,6 +94,7 @@ typedef struct {
 	bool  EnCalled;
 	BOOL rowTobeUpdated;
 	BOOL isChannelBlocked;
+	BOOL isApiToBeCalled;
 	bool isIVRChannel;
 	int   lineState;
 	BOOL isAvailable;
@@ -121,19 +123,19 @@ typedef struct
 	int priority;
 }pnNumWithEncryptedAni;
 
-//typedef struct
-//{
-//	map<char ,char*> songCode;
-//	char patchDnis[31];
-//	char levelType[10];
-//	int cgLevel;
-//	int invalidKeyLevel;
-//	int noKeyLevel;
-//}songsRepeatLevelInfo;
+typedef struct
+{
+	map<std::string ,std::string> dtmfPromoCode;
+	char patchDnis[31];
+	char levelType[15];
+	char cgLevel[4];
+	char noKeyLevel[4];
+	char invalidKeyLevel[4];
+}SongsRepeatLevelInfo;
 
 typedef struct
 {
-	//map<int, songsRepeatLevelInfo> tblSongsMaster;
+	map<int, SongsRepeatLevelInfo> tblSongsMaster;
 	vector<pnNumWithEncryptedAni> phnumBuf;
 	vector<std::string> cliList;
 	//char CLI[31];
@@ -182,6 +184,7 @@ public:
 	int mWaitDialAnswerTime;
 	AESEncryption aesEncryption;
 	bool IsUpdate;
+	BOOL IsSMSApiEnabled;
 	BOOL IsStartDialling;
 	BOOL IsDailingTimeInRange;
 	BOOL IsTimerOn;
@@ -221,6 +224,7 @@ public:
 	void ReadNumbersFromFiles();
 	void WriteToINIFile(const char* key, const char* value);
 	void GetDTMFandDNISBuffer(int ch);
+	void PrepareAndHitURLApi(int ch);
 	int PlayMediaFile(int ch, int promptsNumber);
 	void ContinuePlayingPrompts(int ch);
 	BOOL isCampaignChannelsCleared(int campaignKey);
@@ -233,7 +237,7 @@ public:
 	void InitializeDBConnection();
 	void RefreshDBConnection(MYSQL* dbConn, const char* dbQuery);
 	BOOL GetDBData();
-	//void GetSongsMasterData(char* campaignId);
+	void GetSongsMasterData(char* campaignId, size_t campaignKey);
 	BOOL UpdateDBData();
 	void CloseDBConn();
 	BOOL InitializeChannels();
