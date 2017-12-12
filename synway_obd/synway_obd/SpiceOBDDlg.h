@@ -149,6 +149,7 @@ typedef struct
 	char promptsDirectory[100];
 	char campaign_id[100];
 	char campaign_name[50];
+	char cgShortCode[20];
 	char promptsPath[10][100];
 	OBD_DIAL_PLAN obdDialPlan;
 	int minCh, maxCh;
@@ -200,6 +201,7 @@ public:
 		int nIVRMaxCh;
 	};
 	static UINT SetChannelsStateCount(LPVOID  chCount);
+	static UINT ThreadProcApiCall(LPVOID);
 
 	struct DeallocateProcParam
 	{

@@ -496,9 +496,10 @@ BOOL CSpiceOBDDlg::GetDBData()
 		int query_state;
 		char queryStr[1024];
 
-		StrCpyA(queryStr, "select campaign_id, cli, port_number, prompts_directory, obd_type, circle, zone, campaign_name, first_consent_digit,test_callnumber, test_callctr, test_callflag, current_retry\
-			  from tbl_campaign_master where (campaign_status = 1 or campaign_status = 2) and (base_status = 1 or test_callflag = 1) and prompts_status = 1 \
-				order by camp_seqId");
+		StrCpyA(queryStr, "select tcm.campaign_id, tcm.cli, tcm.port_number, tcm.prompts_directory, tcm.obd_type, tcm.circle, tcm.zone, tcm.campaign_name, \
+			tcm.first_consent_digit,tcm.test_callnumber, tcm.test_callctr, tcm.test_callflag, tcm.current_retry, tsm.cgshortcode from tbl_campaign_master as tcm \
+			inner join tbl_service_master as tsm on tcm.service_name = tsm.service_name where(tcm.campaign_status = 1 or tcm.campaign_status = 2) and \
+			(tcm.base_status = 1 or tcm.test_callflag = 1) and tcm.prompts_status = 1 order by camp_seqId");
 
 		logger.log(LOGINFO, queryStr);
 
@@ -601,6 +602,8 @@ BOOL CSpiceOBDDlg::GetDBData()
 				tempdata.testCallCounter = atoi(row[10]);
 				tempdata.testCallflag = atoi(row[11]);
 				tempdata.curRetryCount = atoi(row[12]);
+				StrCpyA(tempdata.cgShortCode, row[13]); //would not change throughout
+
 				tempdata.tmpCallCounter = 0;
 
 				tempdata.minCh = channelsOccupied + 1;
@@ -717,10 +720,10 @@ BOOL CSpiceOBDDlg::GetDBData()
 
 			//}//End For
 #endif // COMMENTED_SECTION
-		}
+			}
 		mysql_free_result(res);
 		//logger.log(LOGINFO, "campaigns size 2: %d", Campaigns.size());
-	}
+		}
 	catch (CException* ex)
 	{
 		CRuntimeClass* curClass = ex->GetRuntimeClass();
@@ -737,7 +740,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 		//PostQuitMessage(0);
 	}
 	return true;
-}
+	}
 
 BOOL CSpiceOBDDlg::UpdateDBData(/*int chState*/)
 {
@@ -1473,16 +1476,31 @@ void CSpiceOBDDlg::LogErrorCodeAndMessage(int ch)
 	logger.log(LOGINFO, "Error code: %s And Error Reason: %s on channel Number: %d , phone number: %s", ChInfo[ch].CDRStatus.reason_code, ChInfo[ch].CDRStatus.reason, ch, ChInfo[ch].pPhoNumBuf);
 }
 
+UINT CSpiceOBDDlg::ThreadProcApiCall(LPVOID threadParam)
+{
+	while (true)
+	{
+		ApiHttpURL apiURL;
+		std::string tmpUrl = apiURL.PopFrontURL();
+		if (!tmpUrl.empty())
+		{
+			CURLcode result = apiURL.callApi(tmpUrl.c_str());
+			((CLogger*)threadParam)->log(LOGINFO, "PrepareAndHitURLApi response : %s", ApiHttpURL::readBuffer.c_str());
+		}
+		Sleep(1000);
+	}
+}
+
 void CSpiceOBDDlg::PrepareAndHitURLApi(int ch)
 {
-	if (IsSMSApiEnabled && ChInfo[ch].isApiToBeCalled)
+	if (ChInfo[ch].isApiToBeCalled)
 	{
 		logger.log(LOGINFO, "PrepareAndHitURLApi start");
 		ChInfo[ch].isApiToBeCalled = false;
 		char * dnisBuffer = ChInfo[ch].CDRStatus.DNISBuf;
 		const char* pipeDelim = "|";
 		char* context;
-		std::string lastPatchDnis;
+		std::string lastPatchDnis("");
 		char productCode[10];
 		char promoCode[20];
 
@@ -1492,24 +1510,25 @@ void CSpiceOBDDlg::PrepareAndHitURLApi(int ch)
 			lastPatchDnis = dnisBuffer;
 			dnisBuffer = strtok_s(NULL, pipeDelim, &context);
 		}
-
-		if (lastPatchDnis.length() > 12)
+		StrCpyA(promoCode, "0");
+		if (lastPatchDnis.empty())
+		{
+			StrCpyA(productCode, Campaigns.at(ChInfo[ch].CampaignID).cgShortCode);
+		}
+		else if (lastPatchDnis.length() > 8)
 		{
 			StrCpyA(productCode, lastPatchDnis.substr(8, 4).c_str());
-			StrCpyA(promoCode, lastPatchDnis.substr(12, 7).c_str());
+			if (lastPatchDnis.length() > 12)
+			{
+				StrCpyA(promoCode, lastPatchDnis.substr(12, 7).c_str());
+			}
 		}
-		else
-		{
-			StrCpyA(productCode, lastPatchDnis.substr(8, 4).c_str());
-			StrCpyA(promoCode, "0");
-		}
-		ApiHttpURL apiURL;
 		char prepareUrlStr[1024];
 		sprintf_s(prepareUrlStr, "http://172.27.32.46/SynwayObd_API/obdSmsApi?msisdn=%s&circle=%s&civrId=%s&promoCode=%s",
 			ChInfo[ch].pPhoNumBuf, circle, productCode, promoCode);
 		logger.log(LOGINFO, "PrepareAndHitURLApi prepared URL : %s", prepareUrlStr);
-		CURLcode result = apiURL.callApi(prepareUrlStr);
-		logger.log(LOGINFO, "PrepareAndHitURLApi end and response : %s", ApiHttpURL::readBuffer.c_str());
+		ApiHttpURL apiURL;
+		apiURL.PushBackURL(prepareUrlStr);
 	}
 }
 
@@ -1519,7 +1538,10 @@ void CSpiceOBDDlg::HangupCall(int ch)
 	try
 	{
 		GetDTMFandDNISBuffer(ch);
-		PrepareAndHitURLApi(ch);
+		if (IsSMSApiEnabled)
+		{
+			PrepareAndHitURLApi(ch);
+		}
 		logger.log(LOGINFO, "Hangup Called for channel: %d, outbound IVRChannelNumber: %d", ch, ChInfo[ch].IVRChannelNumber);
 		if (ChInfo[ch].IVRChannelNumber != -1)
 		{
@@ -1756,7 +1778,8 @@ void CSpiceOBDDlg::GetDTMFandDNISBuffer(int ch)
 {
 	StrCpyA(ChInfo[ch].CDRStatus.dtmf2, SsmGetDtmfStrA(ch));
 	SsmClearRxDtmfBuf(ch);
-	if (StrCmpA(ChInfo[ch].CDRStatus.dtmf2, "") == 0 && StrCmpA(ChInfo[ch].CDRStatus.DNIS, ""))
+	if ((StrCmpA(ChInfo[ch].CDRStatus.dtmf2, "") == 0 && StrCmpA(ChInfo[ch].CDRStatus.DNIS, "")) ||
+		(Campaigns.at(ChInfo[ch].CampaignID).obdDialPlan == Informative && StrCmpA(ChInfo[ch].CDRStatus.reason, "Answered") == 0))
 	{
 		ChInfo[ch].isApiToBeCalled = true;
 	}
@@ -1802,7 +1825,7 @@ int CSpiceOBDDlg::PlayMediaFile(int ch, int promptsNumber)
 		logger.log(LOGERR, "%s file missing on path", tmpMediaPath);
 		promptsFileName.Append(_T(" Prompt Missing!!!"));
 		AfxMessageBox(promptsFileName);
-		PostQuitMessage(0);
+		OnBnClickedDiallingStop();
 	}
 	return 0;
 }
@@ -2063,12 +2086,12 @@ void CSpiceOBDDlg::DoUserWork()
 		case USER_WAIT_REMOTE_PICKUP:
 			/*logger.log(LOGINFO, "Phone Number: %s, AutoDial State:%d Channel Number: %d, channel state: %d, Release reason: %hu , autodialFail Reason : %d, Pending reason: %d",
 			ChInfo[i].pPhoNumBuf, SsmChkAutoDial(i), i, SsmGetChState(i), SsmGetReleaseReason(i), SsmGetAutoDialFailureReason(i), SsmGetPendingReason(i));*/
-			if (SsmGetChState(i) == S_CALL_RINGING)
+			/*if (SsmGetChState(i) == S_CALL_RINGING)
 			{
 				StrCpyA(ChInfo[i].CDRStatus.status, "FAIL");
 				StrCpyA(ChInfo[i].CDRStatus.reason, "Missed");
 				StrCpyA(ChInfo[i].CDRStatus.reason_code, "2");
-			}
+			}*/
 			switch (SsmChkAutoDial(i))
 			{
 			case DIAL_VOICE:
@@ -2391,11 +2414,23 @@ void CSpiceOBDDlg::DoUserWork()
 												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode[ChInfo[i].CDRStatus.dtmf].c_str());
 											StrCpyA(ChInfo[i].CDRStatus.songName,
 												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode[ChInfo[i].CDRStatus.dtmf].c_str()); //copying song code for MIS instead of song name.
-											
+
 											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
 											//StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
-											StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+											//Changes made to acomodate in case of * and # are part of dtmf in DT songs
+											if (!StrCmpA(ChInfo[i].CDRStatus.dtmf, "*")) //check if *
+											{
+												StrCatA(patchDNIS, "1");
+											}
+											else if (!StrCmpA(ChInfo[i].CDRStatus.dtmf, "#")) // check if #
+											{
+												StrCatA(patchDNIS, "2");
+											}
+											else //for all 0-9
+											{
+												StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
+											}
 										}
 										else if (StrCmpIA(levelType, "SERVICE") == 0)
 										{
@@ -3274,7 +3309,10 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 				}
 			}
 			CWinThread* bThread = AfxBeginThread(SetChannelsStateCount, new ChCount{ nTotalCh, nIVRMinCh, nIVRMaxCh });
-
+			if (IsSMSApiEnabled)
+			{
+				CWinThread* threadP = AfxBeginThread(ThreadProcApiCall, (LPVOID)&logger);
+			}
 			//Loading wav file on different positions for all campaigns
 			//			char alias[10];
 			//int index = 0;
