@@ -434,7 +434,7 @@ void CSpiceOBDDlg::GetSongsMasterData(char* campaignId, size_t campaignKey)
 	char songQuery[1024];
 	int queryState;
 
-	sprintf_s(songQuery, "select GROUP_CONCAT(concat_ws('$', dtmf, promo_code) SEPARATOR ', ') as dtmf_promo_code, getSecondDnis('%s') as DNIS, repeat_level, level_type, cg_level, no_key, invalid_key \
+	sprintf_s(songQuery, "select GROUP_CONCAT(concat_ws('$', dtmf, promo_code, lang_code) SEPARATOR ', ') as dtmf_promo_code, getSecondDnis('%s') as DNIS, repeat_level, level_type, cg_level, no_key, invalid_key \
 		from tbl_songs_master where campaign_id = '%s' group by repeat_level", campaignId, campaignId);
 
 	queryState = mysql_query(connSelect, songQuery);
@@ -457,22 +457,19 @@ void CSpiceOBDDlg::GetSongsMasterData(char* campaignId, size_t campaignKey)
 		const char* commaDelim = ", ";
 		char *firstContext;
 		//Fetch total channel for dialout IVR
-		map<std::string, std::string>().swap(songsRepeatLevelInfo.dtmfPromoCode); //Clear all data
+		map<std::string, DTMFWiseData>().swap(songsRepeatLevelInfo.dtmfWiseData); //Clear all data
 		char *dtmfPromoCodePairListPtr = strtok_s(dtmfPromoCodePair, commaDelim, &firstContext);
 		while (dtmfPromoCodePairListPtr)
 		{
 			char* dtmfKey;
-			char *promoCodeVal;
+			DTMFWiseData tmpDTMFWiseData;
 			const char* dollarDelim = "$";
 			char *nextContext;
-			char * dtmfPromoCodePairPtr = strtok_s(dtmfPromoCodePairListPtr, dollarDelim, &nextContext);
-			dtmfKey = dtmfPromoCodePairPtr;
-			while (dtmfPromoCodePairPtr)
-			{
-				promoCodeVal = dtmfPromoCodePairPtr;
-				dtmfPromoCodePairPtr = strtok_s(NULL, dollarDelim, &nextContext);
-			}
-			songsRepeatLevelInfo.dtmfPromoCode.insert(pair<std::string, std::string>(dtmfKey, promoCodeVal));
+			dtmfKey = strtok_s(dtmfPromoCodePairListPtr, dollarDelim, &nextContext);
+			tmpDTMFWiseData.dtmfPromoCode = strtok_s(NULL, dollarDelim, &nextContext);
+			char *tmpLangCode = strtok_s(NULL, dollarDelim, &nextContext);
+			tmpDTMFWiseData.langCode = tmpLangCode ? tmpLangCode : DEFAULT_LANG_CODE; //deafult language code
+			songsRepeatLevelInfo.dtmfWiseData.insert(pair<std::string, DTMFWiseData>(dtmfKey, tmpDTMFWiseData));
 			dtmfPromoCodePairListPtr = strtok_s(NULL, commaDelim, &firstContext);
 		}
 		StrCpyA(songsRepeatLevelInfo.patchDnis, rowPromo[1]);
@@ -497,7 +494,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 		char queryStr[1024];
 
 		StrCpyA(queryStr, "select tcm.campaign_id, tcm.cli, tcm.port_number, tcm.prompts_directory, tcm.obd_type, tcm.circle, tcm.zone, tcm.campaign_name, \
-			tcm.first_consent_digit,tcm.test_callnumber, tcm.test_callctr, tcm.test_callflag, tcm.current_retry, tsm.cgshortcode from tbl_campaign_master as tcm \
+			tcm.first_consent_digit,tcm.test_callnumber, tcm.test_callctr, tcm.test_callflag, tcm.current_retry, tsm.cgserviceid from tbl_campaign_master as tcm \
 			inner join tbl_service_master as tsm on tcm.service_name = tsm.service_name where(tcm.campaign_status = 1 or tcm.campaign_status = 2) and \
 			(tcm.base_status = 1 or tcm.test_callflag = 1) and tcm.prompts_status = 1 order by camp_seqId");
 
@@ -1487,7 +1484,7 @@ UINT CSpiceOBDDlg::ThreadProcApiCall(LPVOID threadParam)
 			CURLcode result = apiURL.callApi(tmpUrl.c_str());
 			((CLogger*)threadParam)->log(LOGINFO, "PrepareAndHitURLApi response : %s", ApiHttpURL::readBuffer.c_str());
 		}
-		Sleep(1000);
+		Sleep(100);
 	}
 }
 
@@ -2401,19 +2398,24 @@ void CSpiceOBDDlg::DoUserWork()
 								if (Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster.count(ChInfo[i].levelNumber))
 								{
 									StrCpyA(levelType, Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].levelType);
-									if (Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode.count(ChInfo[i].CDRStatus.dtmf)) //Right Input
+									if (Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData.count(ChInfo[i].CDRStatus.dtmf)) //Right Input
 									{
 										jumpLevel = atoi(Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].cgLevel);
 
 										std::string tmpDNIS = Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].patchDnis;
+										std::string tmpLangCode = Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData[ChInfo[i].CDRStatus.dtmf].langCode;
+										if (tmpLangCode.compare(DEFAULT_LANG_CODE)) //check for default lang code.
+										{
+											tmpDNIS.replace(4, tmpLangCode.length(), tmpLangCode);
+										}
 										std::string tmpDTMF = "X";
 										_strupr_s(levelType);
 										if (std::string(levelType).substr(0, 2).compare("DT") == 0)//Find if level type is DT
 										{
 											sprintf_s(songCode, "%s%07s", std::string(levelType).substr(3, std::string::npos).c_str(),
-												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode[ChInfo[i].CDRStatus.dtmf].c_str());
+												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData[ChInfo[i].CDRStatus.dtmf].dtmfPromoCode.c_str());
 											StrCpyA(ChInfo[i].CDRStatus.songName,
-												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode[ChInfo[i].CDRStatus.dtmf].c_str()); //copying song code for MIS instead of song name.
+												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData[ChInfo[i].CDRStatus.dtmf].dtmfPromoCode.c_str()); //copying song code for MIS instead of song name.
 
 											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
@@ -2435,7 +2437,7 @@ void CSpiceOBDDlg::DoUserWork()
 										else if (StrCmpIA(levelType, "SERVICE") == 0)
 										{
 											sprintf_s(songCode, "%04s",
-												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode[ChInfo[i].CDRStatus.dtmf].c_str());
+												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData[ChInfo[i].CDRStatus.dtmf].dtmfPromoCode.c_str());
 											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
 											StrCpyA(patchDNIS, tmpDNIS.c_str());
 											//StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
@@ -2444,7 +2446,7 @@ void CSpiceOBDDlg::DoUserWork()
 										else
 										{
 											sprintf_s(songCode, "%04s",
-												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode[ChInfo[i].CDRStatus.dtmf].c_str());
+												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData[ChInfo[i].CDRStatus.dtmf].dtmfPromoCode.c_str());
 											StrCpyA(patchDNIS, "");
 										}
 										StrCatA(patchDNIS, songCode);
@@ -2480,9 +2482,9 @@ void CSpiceOBDDlg::DoUserWork()
 										MYSQL_RES *resPromo = mysql_store_result(connSelect);
 										MYSQL_ROW rowPromo;*/
 										invalidKeyLevel = 1;
-										if (Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode.size())
+										if (Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData.size())
 										{
-											StrCpyA(songCode, Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode.begin()->second.c_str());
+											StrCpyA(songCode, Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData.begin()->second.dtmfPromoCode.c_str());
 											StrCpyA(levelType, Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].levelType);
 											invalidKeyLevel = atoi(Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].invalidKeyLevel);
 										}
@@ -2543,9 +2545,9 @@ void CSpiceOBDDlg::DoUserWork()
 								MYSQL_RES *resPromo = mysql_store_result(connSelect);
 								MYSQL_ROW rowPromo;*/
 								noKeyLevel = 2;
-								if (Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode.size())
+								if (Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData.size())
 								{
-									StrCpyA(songCode, Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfPromoCode.begin()->second.c_str());
+									StrCpyA(songCode, Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData.begin()->second.dtmfPromoCode.c_str());
 									StrCpyA(levelType, Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].levelType);
 									noKeyLevel = atoi(Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].noKeyLevel);
 								}

@@ -15,6 +15,8 @@
 #include "ApiHttpURL.h"
 #include "afxwin.h"
 
+#define DEFAULT_LANG_CODE "10"
+
 using namespace std;
 
 enum APP_USER_STATE {
@@ -125,7 +127,13 @@ typedef struct
 
 typedef struct
 {
-	map<std::string ,std::string> dtmfPromoCode;
+	std::string dtmfPromoCode;
+	std::string langCode;
+}DTMFWiseData;
+
+typedef struct
+{
+	map<std::string , DTMFWiseData> dtmfWiseData;
 	char patchDnis[31];
 	char levelType[15];
 	char cgLevel[4];
