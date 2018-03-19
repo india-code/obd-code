@@ -16,6 +16,7 @@
 #include "afxwin.h"
 
 #define DEFAULT_LANG_CODE "10"
+#define EMPTY_STRING ""
 
 using namespace std;
 
@@ -39,7 +40,7 @@ enum OBD_DIAL_PLAN
 	Informative = 1,
 	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
 	//AcquisitionalOBDWithout1stConsent,
-	AcquisitionalOBDWith1stConsent, /*1: welcome, 2: No input again, 3: Thanks 4: wrong*/
+	AcquisitionalOBDWith1stConsent, /*welcome - 100, invalid input - 300, No input - 400: Thanks - 500*/
 	AcquisitionalOBDWithIVRServiceCrossPromo /*Promprs Index are as 1-99 product prompts , welcome - 100, idea jingle - 200, invalid input - 300, no input - 400, thanks - 500 */
 };
 
@@ -53,9 +54,20 @@ enum DT_SERVICE_STATE
 	USER_STOP_PLAYING
 };
 
+enum MEDIA_PLAY_STATE
+{
+	USER_PLAY_PROMPT = 1,
+	USER_PLAYING_PROMPT,
+	USER_REPEAT_PROMPT,
+	USER_STOP_PROMPT
+};
 
-
-extern void getErrorResult(LPCTSTR  ApiName);
+enum MEDIA_PLAY_SUBSTATE
+{
+	TOKEN_PROMPT_PREV,
+	TOKEN_PROMPT_PLAYING,
+	TOKEN_PROMPT_POST
+};
 
 typedef struct
 {
@@ -104,7 +116,9 @@ typedef struct {
 	int IVRChannelNumber; //channel number patchedup
 						  //char DtmfBuf[251];
 	DT_SERVICE_STATE DtServiceState;
+	MEDIA_PLAY_SUBSTATE mediaPlaySubState;
 	int ConsentState;
+	int nextConsentState;
 	//int DTCounter;
 	int levelNumber;
 	CDR_STATUS CDRStatus;
@@ -114,13 +128,14 @@ typedef struct {
 	int mediaState;
 	int	nToTrkCh;
 	char pPhoNumBuf[31];
+	char promptsName[31];
 	int	nTimeOut;
 	int CampaignID;
 }CH_INFO;
 
 typedef struct
 {
-	//std::string ani;
+	char promptsName[50];
 	char encryptedAni[31];
 	int priority;
 }pnNumWithEncryptedAni;
@@ -158,6 +173,7 @@ typedef struct
 	char campaign_id[100];
 	char campaign_name[50];
 	char cgShortCode[20];
+	BOOL enableSMSFlag;
 	char promptsPath[10][100];
 	OBD_DIAL_PLAN obdDialPlan;
 	int minCh, maxCh;
@@ -177,14 +193,19 @@ public:
 	WORD	nTotalCh;
 	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh, nIVRMinChNew, nIVRMaxChNew;//, CGMaxCHNum;
 	int contestMinCh, contestMaxCh, tmpContestMinCh;
+	int triggerOBDRange[2];
 	char circle[20], circleLrn[5]; //, zone[20];
-								   //Data stored in DBSettings.INI file
+//Data stored in DBSettings.INI file
 	char host[255];
 	char DBName[255];
 	char username[255];
 	char password[255];
 	int port;
-
+	char rvCampaign[50];
+	char nameTunesPrev[50];
+	char namingTunes[50]; 
+	char nameTunesPost[50]; 
+	
 	CH_INFO* ChInfo;
 	CLogger logger;
 	//BOOL isReloadConfiguration;
@@ -225,7 +246,7 @@ public:
 		int minChVal;
 		int maxChVal;
 	}BlockedChannelRange;
-	char blockedRangeStr[100];
+	char blockedRangeStr[100], triggerOBDChRangeStr[100], triggerOBDName[100];
 	vector<BlockedChannelRange> blockedChannelsRange;
 	BOOL IsChannelBlocked(int ch); //Find the channel is in blocked range
 	BOOL IsPhNumCalledSuccess(char* encrypted_ani);
@@ -252,7 +273,10 @@ public:
 	void CloseDBConn();
 	BOOL InitializeChannels();
 	void LogErrorCodeAndMessage(int ch);
+	void getErrorResult(LPCTSTR  ApiName);
+	void LogOBDAlerts(const char* alertMessage, const char* messageType, const char* alertLevel); //some deafult value are set already
 	void UpDateATrunkChListCtrl();
+	BOOL GetAniTokenPromptsDetails(const char* msisdn, std::string & retTknPrompt);
 	void GetNextUserData();
 	void openCDRLogFile();
 	void openConsentLogFile();
