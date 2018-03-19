@@ -3568,7 +3568,7 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 			//Number should be dialled only between 8AM IST to 8:50 PM IST 
 			//char dateVal[25];
 			tm dateTime = logger.getTime(std::string());
-			if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 8 || dateTime.tm_hour >= 21) //timing change for RV campaign
+			if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 9 || dateTime.tm_hour >= 21) //timing change for RV campaign
 			{
 				IsDailingTimeInRange = false;
 				BOOL isAllChannelsCleared = true;
