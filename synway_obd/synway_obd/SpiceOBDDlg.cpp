@@ -198,6 +198,8 @@ void CSpiceOBDDlg::InitializeDBConnection()
 	GetPrivateProfileStringA("Database", "waitdialtimerange", "30$40$50$", tmpWaitTimeListStr, 256, InitDBSettings);
 	GetPrivateProfileStringA("Database", "waitdialanswertimeout", "45", curWaitTimeOutStr, 20, InitDBSettings);
 	GetPrivateProfileStringA("Database", "contestch", "", contestChRange, 20, InitDBSettings);
+	GetPrivateProfileStringA("Database", "obdstarttime", "09:00#", obdStartTimeStr, 50, InitDBSettings);
+	GetPrivateProfileStringA("Database", "obdstoptime", "20:50#", obdStopTimeStr, 50, InitDBSettings);
 
 	GetPrivateProfileStringA("Database", "RVCampaign", "14546", rvCampaign, 50, InitDBSettings);
 	GetPrivateProfileStringA("Database", "NameTunesPrev", "dear", nameTunesPrev, 50, InitDBSettings);
@@ -923,6 +925,15 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 
 	for (i = 0, nIndex = 0; i < nTotalCh; i++)
 	{
+		if (!ChInfo[i].InUse && ++ChInfo[i].InUseCount < 5)
+		{
+			nIndex++;
+			continue;
+		}
+		else
+		{
+			ChInfo[i].InUseCount = 0;
+		}
 		//if (SsmGetChType(i) != 2) continue;
 		switch (SsmGetChState(i)) {
 		case S_CALL_STANDBY:				state = "S_CALL_STANDBY"; break;
@@ -1238,6 +1249,8 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			StrCpyA(ChInfo[i].CDRStatus.dtmfBuf, EMPTY_STRING);
 			StrCpyA(ChInfo[i].CDRStatus.DNISBuf, EMPTY_STRING);
 			StrCpyA(ChInfo[i].promptsName, EMPTY_STRING);
+			StrCpyA(ChInfo[i].pPhoNumBuf, EMPTY_STRING);
+			StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, EMPTY_STRING);
 			ChInfo[i].isAvailable = true;
 		}
 	}//For loop
@@ -1639,7 +1652,7 @@ void CSpiceOBDDlg::HangupCall(int ch)
 				code = -1;
 				code = SsmHangup(ChInfo[ch].IVRChannelNumber); SsmGetLastErrMsg(errReason);
 				logger.log(LOGINFO, "Return code for SsmHangup(%d) = %d reason = %s", ChInfo[ch].IVRChannelNumber, code, errReason); //Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
-				ChInfo[ChInfo[ch].IVRChannelNumber].InUse = false;
+				//ChInfo[ChInfo[ch].IVRChannelNumber].InUse = false;
 				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 1, L"");
 				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 3, L"");
 				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 4, L"");
@@ -1682,7 +1695,7 @@ void CSpiceOBDDlg::HangupIVRCall(int ch)
 		catch (...) {
 			logger.log(LOGERR, "Error in clearing the columns of the outgoing channel %d", ch);
 		}
-		ChInfo[ch].InUse = false;
+		//ChInfo[ch].InUse = false;
 	}
 	else logger.log(LOGERR, "Got invalid channel %d for HangupIVRCall", ch);
 }
@@ -2040,7 +2053,7 @@ void CSpiceOBDDlg::DialToIVR(int ch, BOOL isContest)
 		HangupIVRCall(ChInfo[ch].IVRChannelNumber);
 		HangupCall(ch);
 	}
-	ChInfo[ChInfo[ch].IVRChannelNumber].InUse = true;
+	//ChInfo[ChInfo[ch].IVRChannelNumber].InUse = true;
 	logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.DNIS);
 }
 
@@ -2156,17 +2169,22 @@ void CSpiceOBDDlg::DoUserWork()
 						m_TrkChList.SetItemText(i, 5, campIdStr);
 					}
 					ChInfo[i].isAvailable = false;
+					ChInfo[i].InUse = true;
 					logger.log(LOGINFO, "DoUserWork Update data Ani : %s, Encrypted Ani: %s, Channel Num: %d", ChInfo[i].pPhoNumBuf, ChInfo[i].CDRStatus.encrypted_ani, i);
 				}
 				else
 				{
-					StrCpyA(ChInfo[i].pPhoNumBuf, EMPTY_STRING);
-					StrCpyA(ChInfo[i].promptsName, EMPTY_STRING);
-					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, "");
-					m_TrkChList.SetItemText(i, 1, L"");
-					m_TrkChList.SetItemText(i, 3, L"");
-					m_TrkChList.SetItemText(i, 4, L"");
-					m_TrkChList.SetItemText(i, 5, L"");
+					if (ChInfo[i].InUse)
+					{
+						ChInfo[i].InUse = false;
+						StrCpyA(ChInfo[i].pPhoNumBuf, EMPTY_STRING);
+						StrCpyA(ChInfo[i].promptsName, EMPTY_STRING);
+						StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, EMPTY_STRING);
+						m_TrkChList.SetItemText(i, 1, L"");
+						m_TrkChList.SetItemText(i, 3, L"");
+						m_TrkChList.SetItemText(i, 4, L"");
+						m_TrkChList.SetItemText(i, 5, L"");
+					}
 				}
 				if (StrCmpA(ChInfo[i].pPhoNumBuf, "") == 0) continue;
 				//SsmClearRxDtmfBuf(i);
@@ -2191,7 +2209,7 @@ void CSpiceOBDDlg::DoUserWork()
 				{
 					SsmStopTalkWith(i, ChInfo[i].IVRChannelNumber);
 					SsmHangup(ChInfo[i].IVRChannelNumber);
-					ChInfo[ChInfo[i].IVRChannelNumber].InUse = false;
+					//ChInfo[ChInfo[i].IVRChannelNumber].InUse = false;
 					ChInfo[i].IVRChannelNumber = -1;
 				}
 				GetDTMFandDNISBuffer(i);
@@ -3449,6 +3467,30 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 				triggerOBDRange[1] = atoi(chValueStr);
 			}
 		}
+		logger.log(LOGINFO, "Start time : %s, Stop Time: %s", obdStartTimeStr, obdStopTimeStr);
+		if (StrCmpA(obdStartTimeStr, "") && StrCmpA(obdStopTimeStr, ""))
+		{
+			const char* delim = ":#";
+			char *context;
+			char *startTimeValueStr = strtok_s(obdStartTimeStr, delim, &context);
+			startTimeHour = atoi(startTimeValueStr);
+			if (startTimeValueStr)
+			{
+				startTimeValueStr = strtok_s(NULL, delim, &context);
+				startTimeMin = atoi(startTimeValueStr);
+			}
+
+			char *stopTimeValueStr = strtok_s(obdStopTimeStr, delim, &context);
+			stopTimeHour = atoi(stopTimeValueStr);
+			if (stopTimeValueStr)
+			{
+				stopTimeValueStr = strtok_s(NULL, delim, &context);
+				stopTimeMin = atoi(stopTimeValueStr);
+			}
+			logger.log(LOGINFO, "start hour: %d, start minute: %d, stop hour: %d, stop minute : %d",
+				startTimeHour, startTimeMin, stopTimeHour, stopTimeMin);
+		}
+
 		if (GetDBData() == TRUE)
 		{
 			//logger.log(LOGINFO, "map size: %d, vector1 size: %d", Campaigns.size(), Campaigns.size() > 0 ? Campaigns.at(1).phnumBuf.size() : 0);
@@ -3501,10 +3543,12 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 					StrCpyA(ChInfo[i].CDRStatus.reason, EMPTY_STRING);
 					StrCpyA(ChInfo[i].CDRStatus.status, EMPTY_STRING);
 					StrCpyA(ChInfo[i].CDRStatus.reason_code, EMPTY_STRING);
+					ChInfo[i].InUse = false;
+					ChInfo[i].InUseCount = 0;
 					if (i >= nIVRMinCh && i <= nIVRMaxCh)
 					{
 						ChInfo[i].isIVRChannel = true;
-						ChInfo[i].InUse = false;
+						//ChInfo[i].InUse = false;
 						continue;
 					}
 					for (size_t j = 1; j <= Campaigns.size(); j++)
@@ -3568,7 +3612,8 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 			//Number should be dialled only between 8AM IST to 8:50 PM IST 
 			//char dateVal[25];
 			tm dateTime = logger.getTime(std::string());
-			if ((dateTime.tm_hour >= 20 && dateTime.tm_min > 50) || dateTime.tm_hour < 9 || dateTime.tm_hour >= 21) //timing change for RV campaign
+			if ((dateTime.tm_hour >= stopTimeHour && dateTime.tm_min > stopTimeMin) || 
+				( dateTime.tm_hour < startTimeHour && dateTime.tm_min < startTimeMin) || dateTime.tm_hour >= 21)
 			{
 				IsDailingTimeInRange = false;
 				BOOL isAllChannelsCleared = true;

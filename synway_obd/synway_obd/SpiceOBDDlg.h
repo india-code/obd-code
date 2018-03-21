@@ -113,6 +113,7 @@ typedef struct {
 	int   lineState;
 	BOOL isAvailable;
 	int InUse;
+	int InUseCount;
 	int IVRChannelNumber; //channel number patchedup
 						  //char DtmfBuf[251];
 	DT_SERVICE_STATE DtServiceState;
@@ -205,7 +206,9 @@ public:
 	char nameTunesPrev[50];
 	char namingTunes[50]; 
 	char nameTunesPost[50]; 
-	
+	char obdStartTimeStr[10], obdStopTimeStr[10];
+	int startTimeMin, startTimeHour;
+	int stopTimeMin, stopTimeHour;
 	CH_INFO* ChInfo;
 	CLogger logger;
 	//BOOL isReloadConfiguration;
