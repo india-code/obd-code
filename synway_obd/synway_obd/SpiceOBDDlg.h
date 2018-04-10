@@ -262,6 +262,7 @@ public:
 	int PlayMediaFile(int ch, int promptsNumber);
 	void ContinuePlayingPrompts(int ch);
 	BOOL isCampaignChannelsCleared(int campaignKey);
+	void ClearChannelsGrid();
 	int GetAnIdleChannel(BOOL isContest);
 	BOOL InitCtiBoard();
 	void DoUserWork();

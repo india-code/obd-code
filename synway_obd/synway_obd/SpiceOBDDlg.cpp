@@ -217,6 +217,29 @@ void CSpiceOBDDlg::InitializeDBConnection()
 	StrCatA(titleName, circle);
 	SetWindowTextA(m_hWnd, titleName);
 
+	logger.log(LOGINFO, "Start time : %s, Stop Time: %s", obdStartTimeStr, obdStopTimeStr);
+	if (StrCmpA(obdStartTimeStr, "") && StrCmpA(obdStopTimeStr, ""))
+	{
+		const char* delim = ":#";
+		char *context;
+		char *startTimeValueStr = strtok_s(obdStartTimeStr, delim, &context);
+		startTimeHour = atoi(startTimeValueStr);
+		if (startTimeValueStr)
+		{
+			startTimeValueStr = strtok_s(NULL, delim, &context);
+			startTimeMin = atoi(startTimeValueStr);
+		}
+
+		char *stopTimeValueStr = strtok_s(obdStopTimeStr, delim, &context);
+		stopTimeHour = atoi(stopTimeValueStr);
+		if (stopTimeValueStr)
+		{
+			stopTimeValueStr = strtok_s(NULL, delim, &context);
+			stopTimeMin = atoi(stopTimeValueStr);
+		}
+		logger.log(LOGINFO, "start hour: %d, start minute: %d, stop hour: %d, stop minute : %d",
+			startTimeHour, startTimeMin, stopTimeHour, stopTimeMin);
+	}
 
 	//CGMaxCHNum = GetPrivateProfileIntA("Database", "CGMaxCHNum", 30, InitDBSettings);
 	//nTotalCh = GetPrivateProfileIntA("Database", "TotalChannelsCount", 90, InitDBSettings);
@@ -695,7 +718,8 @@ BOOL CSpiceOBDDlg::GetDBData()
 			{
 				GetSongsMasterData(row[0], campKey);
 				//Get out dialer numbers 5 times to the allocated channel numbers to the campaign
-				sprintf_s(queryStr, "select ani, priority, prompts_name from tbl_outdialer_base where campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
+				sprintf_s(queryStr, "select ani, priority, prompts_name from tbl_outdialer_base \
+				where date(insert_date_time) = date(now()) and campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
 					row[0], 0, (5 * Campaigns.at(campKey).channelsAllocated));
 
 				logger.log(LOGINFO, queryStr);
@@ -3467,29 +3491,6 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 				triggerOBDRange[1] = atoi(chValueStr);
 			}
 		}
-		logger.log(LOGINFO, "Start time : %s, Stop Time: %s", obdStartTimeStr, obdStopTimeStr);
-		if (StrCmpA(obdStartTimeStr, "") && StrCmpA(obdStopTimeStr, ""))
-		{
-			const char* delim = ":#";
-			char *context;
-			char *startTimeValueStr = strtok_s(obdStartTimeStr, delim, &context);
-			startTimeHour = atoi(startTimeValueStr);
-			if (startTimeValueStr)
-			{
-				startTimeValueStr = strtok_s(NULL, delim, &context);
-				startTimeMin = atoi(startTimeValueStr);
-			}
-
-			char *stopTimeValueStr = strtok_s(obdStopTimeStr, delim, &context);
-			stopTimeHour = atoi(stopTimeValueStr);
-			if (stopTimeValueStr)
-			{
-				stopTimeValueStr = strtok_s(NULL, delim, &context);
-				stopTimeMin = atoi(stopTimeValueStr);
-			}
-			logger.log(LOGINFO, "start hour: %d, start minute: %d, stop hour: %d, stop minute : %d",
-				startTimeHour, startTimeMin, stopTimeHour, stopTimeMin);
-		}
 
 		if (GetDBData() == TRUE)
 		{
@@ -3601,6 +3602,21 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 	return true;
 }
 
+void CSpiceOBDDlg::ClearChannelsGrid()
+{
+	for (size_t i = 0; i < nTotalCh; i++)
+	{
+		ChInfo[i].InUse = false;
+		StrCpyA(ChInfo[i].pPhoNumBuf, EMPTY_STRING);
+		StrCpyA(ChInfo[i].promptsName, EMPTY_STRING);
+		StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, EMPTY_STRING);
+		m_TrkChList.SetItemText(i, 1, L"");
+		m_TrkChList.SetItemText(i, 3, L"");
+		m_TrkChList.SetItemText(i, 4, L"");
+		m_TrkChList.SetItemText(i, 5, L"");
+	}
+}
+
 void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 {
 	// TODO: Add your message handler code here and/or call default
@@ -3625,8 +3641,9 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 						break;
 					}
 				}
-				if (IsTimerOn && isAllChannelsCleared)
+				if (IsTimerOn && (isAllChannelsCleared || dateTime.tm_hour >= 21))
 				{
+					ClearChannelsGrid();
 					OnBnClickedDiallingStop();
 					KillTimer(nIDEvent);
 					IsTimerOn = false;
@@ -3649,6 +3666,12 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 			BeginWaitCursor(); //Set wait cursor
 			if (!InitCtiBoard())  return;
 			InitializeDBConnection();
+			tm dateTime = logger.getTime(std::string());
+			if ((dateTime.tm_hour >= stopTimeHour && dateTime.tm_min > stopTimeMin) ||
+				(dateTime.tm_hour < startTimeHour && dateTime.tm_min < startTimeMin) || dateTime.tm_hour >= 21)
+			{
+				return;
+			}
 			if (!InitializeChannels()) return;
 			InitUserDialingList();
 			BringWindowToTop();
