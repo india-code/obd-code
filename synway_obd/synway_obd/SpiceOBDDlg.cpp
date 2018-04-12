@@ -2294,7 +2294,7 @@ void CSpiceOBDDlg::DoUserWork()
 				{
 					if (welcomePromptsNum == 100) // Default flow for inforamtive and 1st consent
 					{
-						StrCpyA(ChInfo[i].promptsName, "100");
+						StrCpyA(ChInfo[i].promptsName, "1");
 					}
 					ChInfo[i].nStep = USER_TALKING;
 					ChInfo[i].DialPlanStatus = Campaigns.at(tempCampId).obdDialPlan;
