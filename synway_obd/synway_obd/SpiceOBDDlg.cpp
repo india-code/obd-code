@@ -3628,8 +3628,10 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 			//Number should be dialled only between 8AM IST to 8:50 PM IST 
 			//char dateVal[25];
 			tm dateTime = logger.getTime(std::string());
-			if ((dateTime.tm_hour >= stopTimeHour && dateTime.tm_min > stopTimeMin) || 
-				( dateTime.tm_hour < startTimeHour && dateTime.tm_min < startTimeMin) || dateTime.tm_hour >= 21)
+
+			if (dateTime.tm_hour > stopTimeHour || dateTime.tm_hour < startTimeHour || 
+				(dateTime.tm_hour >= stopTimeHour && dateTime.tm_min > stopTimeMin) ||
+				(dateTime.tm_hour <= startTimeHour && dateTime.tm_min < startTimeMin) || dateTime.tm_hour >= 21)
 			{
 				IsDailingTimeInRange = false;
 				BOOL isAllChannelsCleared = true;
@@ -3667,8 +3669,9 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 			if (!InitCtiBoard())  return;
 			InitializeDBConnection();
 			tm dateTime = logger.getTime(std::string());
-			if ((dateTime.tm_hour >= stopTimeHour && dateTime.tm_min > stopTimeMin) ||
-				(dateTime.tm_hour < startTimeHour && dateTime.tm_min < startTimeMin) || dateTime.tm_hour >= 21)
+			if (dateTime.tm_hour > stopTimeHour || dateTime.tm_hour < startTimeHour ||
+				(dateTime.tm_hour >= stopTimeHour && dateTime.tm_min > stopTimeMin) ||
+				(dateTime.tm_hour <= startTimeHour && dateTime.tm_min < startTimeMin) || dateTime.tm_hour >= 21)
 			{
 				return;
 			}
