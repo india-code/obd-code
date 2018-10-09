@@ -39,9 +39,9 @@ enum OBD_DIAL_PLAN
 {
 	Informative = 1,
 	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
-	//AcquisitionalOBDWithout1stConsent,
-	AcquisitionalOBDWith1stConsent, /*welcome - 100, invalid input - 300, No input - 400: Thanks - 500*/
-	AcquisitionalOBDWithIVRServiceCrossPromo /*Promprs Index are as 1-99 product prompts , welcome - 100, idea jingle - 200, invalid input - 300, no input - 400, thanks - 500 */
+										  //AcquisitionalOBDWithout1stConsent,
+										  AcquisitionalOBDWith1stConsent, /*welcome - 100, invalid input - 300, No input - 400: Thanks - 500*/
+										  AcquisitionalOBDWithIVRServiceCrossPromo /*Promprs Index are as 1-99 product prompts , welcome - 100, idea jingle - 200, invalid input - 300, no input - 400, thanks - 500 */
 };
 
 //different states during dt and service 
@@ -124,6 +124,7 @@ typedef struct {
 	int levelNumber;
 	CDR_STATUS CDRStatus;
 	OBD_DIAL_PLAN DialPlanStatus;
+	int obdType;
 	// user channel  vars
 	APP_USER_STATE	nStep;
 	int mediaState;
@@ -139,6 +140,7 @@ typedef struct
 	char promptsName[50];
 	char encryptedAni[31];
 	int priority;
+	int obdType;
 }pnNumWithEncryptedAni;
 
 typedef struct
@@ -149,7 +151,7 @@ typedef struct
 
 typedef struct
 {
-	map<std::string , DTMFWiseData> dtmfWiseData;
+	map<std::string, DTMFWiseData> dtmfWiseData;
 	char patchDnis[31];
 	char levelType[15];
 	char cgLevel[4];
@@ -196,16 +198,17 @@ public:
 	int contestMinCh, contestMaxCh, tmpContestMinCh;
 	int triggerOBDRange[2];
 	char circle[20], circleLrn[5]; //, zone[20];
-//Data stored in DBSettings.INI file
+								   //Data stored in DBSettings.INI file
+	char InitDBSettings[260];
 	char host[255];
 	char DBName[255];
 	char username[255];
 	char password[255];
-	int port;
+	int port, nextCallGapDuration;
 	char rvCampaign[50];
 	char nameTunesPrev[50];
-	char namingTunes[50]; 
-	char nameTunesPost[50]; 
+	char namingTunes[50];
+	char nameTunesPost[50];
 	char obdStartTimeStr[10], obdStopTimeStr[10];
 	int startTimeMin, startTimeHour;
 	int stopTimeMin, stopTimeHour;

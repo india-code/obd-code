@@ -181,7 +181,7 @@ void CSpiceOBDDlg::InitializeDBConnection()
 	connPort = mysql_init(NULL);
 
 	//unsigned int connTimeOut = 365 * 24 * 3600;
-	char CurPath[260], InitDBSettings[260], tmpWaitTimeListStr[256];
+	char CurPath[260], tmpWaitTimeListStr[256];
 	GetCurrentDirectoryA(200, CurPath);
 	StrCpyA(InitDBSettings, CurPath);
 	StrCatA(InitDBSettings, "\\DBSettings.INI");
@@ -205,7 +205,7 @@ void CSpiceOBDDlg::InitializeDBConnection()
 	GetPrivateProfileStringA("Database", "NameTunesPrev", "dear", nameTunesPrev, 50, InitDBSettings);
 	GetPrivateProfileStringA("Database", "NameTune", "name_tunes", namingTunes, 50, InitDBSettings);
 	GetPrivateProfileStringA("Database", "NameTunesPost", "name_tunes", nameTunesPost, 50, InitDBSettings);
-	
+
 	port = GetPrivateProfileIntA("Database", "Port", 3306, InitDBSettings);
 	IsSMSApiEnabled = GetPrivateProfileIntA("Database", "enablesmsapi", 0, InitDBSettings);
 
@@ -599,7 +599,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 					//StrCpyA(Campaigns.at(campaignKey).CLI, row[1]);
 					std::string strBuf = row[1];
 					size_t offset;
-					logger.log(LOGINFO, "Repaeat Campaign ID: %s, CLI: %s, CLI vector Size: %d", 
+					logger.log(LOGINFO, "Repeat Campaign ID: %s, CLI: %s, CLI vector Size: %d",
 						Campaigns.at(campaignKey).campaign_id, strBuf.c_str(), Campaigns.at(campaignKey).cliList.size());
 					//Campaigns.at(campaignKey).cliList.clear();
 					vector<std::string>().swap(Campaigns.at(campaignKey).cliList);
@@ -718,7 +718,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 			{
 				GetSongsMasterData(row[0], campKey);
 				//Get out dialer numbers 5 times to the allocated channel numbers to the campaign
-				sprintf_s(queryStr, "select ani, priority, prompts_name from tbl_outdialer_base \
+				sprintf_s(queryStr, "select ani, priority, prompts_name, obd_type from tbl_outdialer_base \
 				where date(insert_date_time) = date(now()) and campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
 					row[0], 0, (5 * Campaigns.at(campKey).channelsAllocated));
 
@@ -742,7 +742,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 					//logger.log(LOGINFO, "Going for decryption of the string buffer:  %s size of campaigns is:%d", rowPhBuf[0], Campaigns.size());
 					//std::string DecryptedVal = aesEncryption.DecodeAndDecrypt(rowPhBuf[0]);
 					Campaigns.at(campKey).phnumBuf.reserve(5 * Campaigns.at(campKey).channelsAllocated);
-					Campaigns.at(campKey).phnumBuf.push_back({/* DecryptedVal,*/"", "", atoi(rowPhBuf[1]) });
+					Campaigns.at(campKey).phnumBuf.push_back({/* DecryptedVal,*/"", "", atoi(rowPhBuf[1]), atoi(rowPhBuf[3]) });
 					StrCpyA(Campaigns.at(campKey).phnumBuf.at(curIndex).encryptedAni, rowPhBuf[0]);
 					StrCpyA(Campaigns.at(campKey).phnumBuf.at(curIndex).promptsName, rowPhBuf[2]);
 					isCampaignCompleted = false;
@@ -820,7 +820,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 #endif // COMMENTED_SECTION
 		}
 		mysql_free_result(res);
-		//logger.log(LOGINFO, "campaigns size 2: %d", Campaigns.size());
+		logger.log(LOGINFO, "Total available campaigns: %d", Campaigns.size());
 	}
 	catch (CException* ex)
 	{
@@ -1041,6 +1041,8 @@ void CSpiceOBDDlg::UpDateATrunkChListCtrl()
 	if (IsUpdate)
 	{
 		UpdateStatusAndPickNextRecords();
+		//nextCallGapDuration = GetPrivateProfileIntA("Database", "nextcallgapduration", 1, InitDBSettings);
+		//Sleep(nextCallGapDuration);
 	}
 	//	char queryStr[256];
 	//	int query_state;
@@ -1676,7 +1678,7 @@ void CSpiceOBDDlg::HangupCall(int ch)
 				code = -1;
 				code = SsmHangup(ChInfo[ch].IVRChannelNumber); SsmGetLastErrMsg(errReason);
 				logger.log(LOGINFO, "Return code for SsmHangup(%d) = %d reason = %s", ChInfo[ch].IVRChannelNumber, code, errReason); //Addional logging done by sandeep rajan - 24th May, 2017 to check the flow
-				//ChInfo[ChInfo[ch].IVRChannelNumber].InUse = false;
+																																	 //ChInfo[ChInfo[ch].IVRChannelNumber].InUse = false;
 				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 1, L"");
 				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 3, L"");
 				m_TrkChList.SetItemText(ChInfo[ch].IVRChannelNumber, 4, L"");
@@ -2156,6 +2158,7 @@ void CSpiceOBDDlg::DoUserWork()
 						StrCpyA(ChInfo[i].pPhoNumBuf, DecryptedVal.c_str());
 						StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, tmpEncryptedAni);
 						StrCpyA(ChInfo[i].promptsName, Campaigns.at(tempCampId).phnumBuf.front().promptsName);
+						ChInfo[i].obdType = Campaigns.at(tempCampId).phnumBuf.front().obdType;
 						//delete Campaigns.at(tempCampId).phnumBuf.front().ani;
 						if (StrCmpA(ChInfo[i].promptsName, EMPTY_STRING))
 						{
@@ -2204,6 +2207,7 @@ void CSpiceOBDDlg::DoUserWork()
 						StrCpyA(ChInfo[i].pPhoNumBuf, EMPTY_STRING);
 						StrCpyA(ChInfo[i].promptsName, EMPTY_STRING);
 						StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, EMPTY_STRING);
+						ChInfo[i].obdType = 0;
 						m_TrkChList.SetItemText(i, 1, L"");
 						m_TrkChList.SetItemText(i, 3, L"");
 						m_TrkChList.SetItemText(i, 4, L"");
@@ -2247,9 +2251,9 @@ void CSpiceOBDDlg::DoUserWork()
 			ChInfo[i].pPhoNumBuf, SsmChkAutoDial(i), i, SsmGetChState(i), SsmGetReleaseReason(i), SsmGetAutoDialFailureReason(i), SsmGetPendingReason(i));*/
 			/*if (SsmGetChState(i) == S_CALL_RINGING)
 			{
-				StrCpyA(ChInfo[i].CDRStatus.status, "FAIL");
-				StrCpyA(ChInfo[i].CDRStatus.reason, "Missed");
-				StrCpyA(ChInfo[i].CDRStatus.reason_code, "2");
+			StrCpyA(ChInfo[i].CDRStatus.status, "FAIL");
+			StrCpyA(ChInfo[i].CDRStatus.reason, "Missed");
+			StrCpyA(ChInfo[i].CDRStatus.reason_code, "2");
 			}*/
 			switch (SsmChkAutoDial(i))
 			{
@@ -2273,14 +2277,14 @@ void CSpiceOBDDlg::DoUserWork()
 				aniNamePrompts = ""; //default empty
 				namePromptFound = false;
 				ChInfo[i].mediaPlaySubState = TOKEN_PROMPT_POST;
-				logger.log(LOGINFO, "First Prompt Name: %s", ChInfo[i].promptsName);
-				if (ChInfo[i].DialPlanStatus == Informative && StrCmpA(ChInfo[i].promptsName, EMPTY_STRING))//check if Informative trigger OBD
+				logger.log(LOGINFO, "First Prompt Name: %s and OBD_TYPE: %d", ChInfo[i].promptsName, ChInfo[i].obdType);
+				if (ChInfo[i].obdType == Informative && StrCmpA(ChInfo[i].promptsName, EMPTY_STRING))//check if Informative trigger OBD
 				{
 					welcomePromptsNum = 0;
 				}
 				else if (StrStrA(Campaigns.at(tempCampId).campaign_name, namingTunes) &&
 					(namePromptFound = GetAniTokenPromptsDetails(ChInfo[i].pPhoNumBuf, aniNamePrompts))) //check if name prompts found 
-				{ 
+				{
 					welcomePromptsNum = 0;
 					StrCpyA(ChInfo[i].promptsName, nameTunesPrev);
 					ChInfo[i].mediaPlaySubState = TOKEN_PROMPT_PREV;
@@ -2292,22 +2296,25 @@ void CSpiceOBDDlg::DoUserWork()
 				}
 				else
 				{
-					if (welcomePromptsNum == 100) // Default flow for inforamtive and 1st consent
-					{
-						StrCpyA(ChInfo[i].promptsName, "1");
-					}
 					ChInfo[i].nStep = USER_TALKING;
-					ChInfo[i].DialPlanStatus = Campaigns.at(tempCampId).obdDialPlan;
+					if (!ChInfo[i].obdType) { //check if obd_type is 0 in outdialer base table
+						ChInfo[i].DialPlanStatus = Campaigns.at(tempCampId).obdDialPlan;
+					}
+					else
+					{
+						ChInfo[i].DialPlanStatus = Campaigns.at(tempCampId).obdDialPlan = (OBD_DIAL_PLAN)ChInfo[i].obdType;
+					}
+
 					if (ChInfo[i].DialPlanStatus != Informative)
 					{
 						ChInfo[i].ConsentState = 1;
 						ChInfo[i].nextConsentState = USER_PLAYING_PROMPT;
 						ChInfo[i].levelNumber = 1;
 						ChInfo[i].DtServiceState = USER_PLAY_PRODUCT;
-						/** 
-						In case of name prompts, set prompts_name for TOKEN_PROMPT_PLAYING sub state 
+						/**
+						In case of name prompts, set prompts_name for TOKEN_PROMPT_PLAYING sub state
 						**/
-						if(namePromptFound)	StrCpyA(ChInfo[i].promptsName, aniNamePrompts.c_str()); 
+						if (namePromptFound)	StrCpyA(ChInfo[i].promptsName, aniNamePrompts.c_str());
 						//int pnFormat; long pnTime;
 						//if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
 						//{
@@ -2554,20 +2561,20 @@ void CSpiceOBDDlg::DoUserWork()
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "")) //Input detected
 							{
 								ChInfo[i].isApiToBeCalled = false; //Reset flag if first call is disconnected only.
-								//Get song details
-								/*char songQuery[1024],songName[50]*/
+																   //Get song details
+																   /*char songQuery[1024],songName[50]*/
 								char songCode[20], levelType[10], patchDNIS[31];
 								int  jumpLevel;
 
 								/*sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = %d",
-									Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf, ChInfo[i].levelNumber);
+								Campaigns.at(ChInfo[i].CampaignID).campaign_id, Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].CDRStatus.dtmf, ChInfo[i].levelNumber);
 
 								queryState = mysql_query(connSelect, songQuery);
 								logger.log(LOGINFO, "Song query for input Detected: %s", songQuery);
 								if (queryState != 0)
 								{
-									CString err(mysql_error(connSelect));
-									AfxMessageBox(err);
+								CString err(mysql_error(connSelect));
+								AfxMessageBox(err);
 								}
 
 								MYSQL_RES *resPromo = mysql_store_result(connSelect);
@@ -2656,14 +2663,14 @@ void CSpiceOBDDlg::DoUserWork()
 										int invalidKeyLevel;
 
 										/*sprintf_s(songQuery, "select promo_code, level_type, invalid_key  from tbl_songs_master where campaign_id = '%s' and repeat_level = %d limit 1",
-											Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].levelNumber);
+										Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].levelNumber);
 
 										queryState = mysql_query(connSelect, songQuery);
 										logger.log(LOGINFO, "Song query for invalid Input: %s", songQuery);
 										if (queryState != 0)
 										{
-											CString err(mysql_error(connSelect));
-											AfxMessageBox(err);
+										CString err(mysql_error(connSelect));
+										AfxMessageBox(err);
 										}
 										MYSQL_RES *resPromo = mysql_store_result(connSelect);
 										MYSQL_ROW rowPromo;*/
@@ -2719,14 +2726,14 @@ void CSpiceOBDDlg::DoUserWork()
 								int noKeyLevel;
 
 								/*sprintf_s(songQuery, "select promo_code, level_type, no_key from tbl_songs_master where campaign_id = '%s' and repeat_level = %d limit 1",
-									Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].levelNumber);
+								Campaigns.at(ChInfo[i].CampaignID).campaign_id, ChInfo[i].levelNumber);
 
 								queryState = mysql_query(connSelect, songQuery);
 								logger.log(LOGINFO, "Song query for No Input: %s", songQuery);
 								if (queryState != 0)
 								{
-									CString err(mysql_error(connSelect));
-									AfxMessageBox(err);
+								CString err(mysql_error(connSelect));
+								AfxMessageBox(err);
 								}
 								MYSQL_RES *resPromo = mysql_store_result(connSelect);
 								MYSQL_ROW rowPromo;*/
@@ -3040,7 +3047,7 @@ void CSpiceOBDDlg::DoUserWork()
 								SsmClearRxDtmfBuf(i);
 								ChInfo[i].ConsentState = USER_PLAY_PROMPT;
 								ChInfo[i].nextConsentState = USER_REPEAT_PROMPT;
-								
+
 								if (PlayMediaFile(i, 300) == -1)
 								{
 									LogErrorCodeAndMessage(i);
@@ -3072,7 +3079,7 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								SsmStopPlay(i);
 								ChInfo[i].ConsentState = USER_STOP_PROMPT;
-								if (PlayMediaFile(i, 500) == -1) 
+								if (PlayMediaFile(i, 500) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -3629,7 +3636,7 @@ void CSpiceOBDDlg::OnTimer(UINT nIDEvent)
 			//char dateVal[25];
 			tm dateTime = logger.getTime(std::string());
 
-			if (dateTime.tm_hour > stopTimeHour || dateTime.tm_hour < startTimeHour || 
+			if (dateTime.tm_hour > stopTimeHour || dateTime.tm_hour < startTimeHour ||
 				(dateTime.tm_hour >= stopTimeHour && dateTime.tm_min > stopTimeMin) ||
 				(dateTime.tm_hour <= startTimeHour && dateTime.tm_min < startTimeMin) || dateTime.tm_hour >= 21)
 			{
