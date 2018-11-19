@@ -1688,6 +1688,10 @@ void CSpiceOBDDlg::HangupCall(int ch)
 			}
 		}
 		SsmClearRxDtmfBuf(ch);
+		if (SsmGetPlayType(ch) == CHK_FILE_LIST) //check whether file list is playing
+		{
+			SsmClearFileList(ch);
+		}
 		SsmStopPlay(ch);
 		SsmHangup(ch);
 		ChInfo[ch].EnCalled = true;
@@ -1936,6 +1940,74 @@ int CSpiceOBDDlg::PlayMediaFile(int ch, int promptsNumber)
 	{
 		sprintf_s(tmpMediaFile, "%s.wav", ChInfo[ch].promptsName);
 	}
+	/* This block of added so that DT songs are not played 
+	*/
+	if (ChInfo[ch].DialPlanStatus == AcquisitionalOBDWithIVRServiceCrossPromo)
+	{
+		//returns songs master iterator if key (promptsNumber) is found else it returns map::end 
+		std::map<int, SongsRepeatLevelInfo>::iterator songMasterIt = Campaigns.at(ChInfo[ch].CampaignID).tblSongsMaster.find(promptsNumber); 
+		
+		if (songMasterIt != Campaigns.at(ChInfo[ch].CampaignID).tblSongsMaster.end() && StrStrIA(songMasterIt->second.levelType, "DT-") 
+			&& (promptsNumber > 0) && (promptsNumber < 100))
+		{
+			for (std::map<std::string, DTMFWiseData>::iterator it = songMasterIt->second.dtmfWiseData.begin();it != songMasterIt->second.dtmfWiseData.end(); it++)
+			{
+				char tmpMediaKeyPath[100];
+				StrCpyA(tmpMediaPath, Campaigns.at(ChInfo[ch].CampaignID).promptsDirectory); //reset prompts path
+				StrCpyA(tmpMediaKeyPath, Campaigns.at(ChInfo[ch].CampaignID).promptsDirectory); 
+
+				sprintf_s(tmpMediaFile, "%s.wav", it->second.dtmfPromoCode.c_str()); //promocode.wav
+				logger.log(LOGINFO, "Media file Path to be played: %s", tmpMediaPath);
+				
+				StrCatA(tmpMediaPath, tmpMediaFile);
+				if (PathFileExistsA(tmpMediaPath))
+				{
+					if (SsmAddToFileList(ch, tmpMediaPath, -1, 0, -1) == -1)
+					{
+						return -1;
+					}
+					CString promptName(tmpMediaFile);
+					m_TrkChList.SetItemText(ch, 5, promptName);
+				}
+				else
+				{
+					CString promptsFileName(tmpMediaFile);
+					logger.log(LOGERR, "%s file missing on path", tmpMediaPath);
+					promptsFileName.Append(_T(" Prompt Missing!!!"));
+					AfxMessageBox(promptsFileName);
+					OnBnClickedDiallingStop();
+				}
+
+				sprintf_s(tmpMediaFile, "key_%s.wav", it->first.c_str()); //Key file prompt as key_x.wav
+				logger.log(LOGINFO, "Media file Path to be played: %s", tmpMediaKeyPath);
+				
+				StrCatA(tmpMediaKeyPath, tmpMediaFile);
+				if (PathFileExistsA(tmpMediaKeyPath))
+				{
+					if (SsmAddToFileList(ch, tmpMediaPath, -1, 0, -1) == -1)
+					{
+						return -1;
+					}
+					CString promptName(tmpMediaFile);
+					m_TrkChList.SetItemText(ch, 5, promptName);
+				}
+				else
+				{
+					CString promptsFileName(tmpMediaFile);
+					logger.log(LOGERR, "%s file missing on path", tmpMediaKeyPath);
+					promptsFileName.Append(_T(" Prompt Missing!!!"));
+					AfxMessageBox(promptsFileName);
+					OnBnClickedDiallingStop();
+				}
+			}
+			if (SsmPlayFileList(ch) == -1)
+			{
+				return -1;
+			}
+			return 0;
+		}
+	}
+	
 
 	StrCatA(tmpMediaPath, tmpMediaFile);
 
@@ -2025,8 +2097,12 @@ BOOL CSpiceOBDDlg::IsPhNumCalledSuccess(char* encrypted_ani)
 
 void CSpiceOBDDlg::DialToIVR(int ch, BOOL isContest)
 {
-	SsmStopPlay(ch);
 	SsmClearRxDtmfBuf(ch);
+	if (StrStrIA(Campaigns.at(ChInfo[ch].CampaignID).tblSongsMaster[ChInfo[ch].levelNumber].levelType, "DT-") || SsmGetPlayType(ch) == CHK_FILE_LIST) //check whether file list is playing
+	{
+		SsmClearFileList(ch);
+	}
+	SsmStopPlay(ch);
 	ChInfo[ch].DtServiceState = USER_CALL_WAIT_PATCHUP;
 	//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
 	if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1)*/ PlayMediaFile(ch, 200) == -1)
@@ -2034,7 +2110,7 @@ void CSpiceOBDDlg::DialToIVR(int ch, BOOL isContest)
 		LogErrorCodeAndMessage(ch);
 		HangupCall(ch);
 	}
-	if (StrStrA(Campaigns.at(ChInfo[ch].CampaignID).campaign_name, rvCampaign))
+	if (StrStrIA(Campaigns.at(ChInfo[ch].CampaignID).campaign_name, rvCampaign))
 	{
 		isContest = true;
 	}
@@ -2548,6 +2624,7 @@ void CSpiceOBDDlg::DoUserWork()
 					//logger.log(LOGINFO, "Media state: %d, ph Number: %s", ChInfo[i].mediaState, ChInfo[i].pPhoNumBuf);
 					if (ChInfo[i].mediaState >= 0)
 					{
+
 						//StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
 						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
 						{
@@ -2745,6 +2822,10 @@ void CSpiceOBDDlg::DoUserWork()
 								}
 								else
 								{
+									if (SsmGetPlayType(i) == CHK_FILE_LIST) //check whether file list is playing
+									{
+										SsmClearFileList(i);
+									}
 									SsmStopPlay(i);
 									ChInfo[i].DtServiceState = USER_PLAY_PRODUCT;
 									ChInfo[i].levelNumber = noKeyLevel;
@@ -2983,6 +3064,9 @@ void CSpiceOBDDlg::DoUserWork()
 						HangupCall(i);
 					}
 					break;
+				/*case USER_WAIT_DTMF:
+
+					break;*/
 				default:
 					break;
 				}
