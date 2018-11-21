@@ -35,13 +35,21 @@ enum TIMER_ID {
 	LOOP_CTRL = 2000
 };
 
-enum OBD_DIAL_PLAN
+enum //for naming prompts ex. 100.wav for WELCOME_PROMPT
+{
+	WELCOME_PROMPT = 100,
+	CALLER_PROMPT = 200,
+	INVALID_PROMPT = 300,
+	NO_INPUT_PROMPT = 400,
+	CALL_HANGUP_PROMPT = 500
+};
+enum OBD_DIAL_PLAN //Different OBD type to differentiate between campaign types
 {
 	Informative = 1,
-	AcquisitionalOBDWith1stAnd2ndConsent, /*Promprs Index are as 1: welcome , 2: again , 3: confirm, 4: no-thanks ,5: thanks */
-										  //AcquisitionalOBDWithout1stConsent,
-										  AcquisitionalOBDWith1stConsent, /*welcome - 100, invalid input - 300, No input - 400: Thanks - 500*/
-										  AcquisitionalOBDWithIVRServiceCrossPromo /*Promprs Index are as 1-99 product prompts , welcome - 100, idea jingle - 200, invalid input - 300, no input - 400, thanks - 500 */
+	AcquisitionalOBDWith1stAnd2ndConsent, 
+	//AcquisitionalOBDWithout1stConsent,
+	AcquisitionalOBDWith1stConsent, 
+	AcquisitionalOBDWithIVRServiceCrossPromo 
 };
 
 //different states during dt and service 
@@ -59,14 +67,15 @@ enum MEDIA_PLAY_STATE
 	USER_PLAY_PROMPT = 1,
 	USER_PLAYING_PROMPT,
 	USER_REPEAT_PROMPT,
-	USER_STOP_PROMPT
+	USER_WAIT_SECOND_CONSENT,
+	CALL_HANGUP
 };
 
 enum MEDIA_PLAY_SUBSTATE
 {
-	TOKEN_PROMPT_PREV,
+	PREV_TOKEN_PROMPT,
 	TOKEN_PROMPT_PLAYING,
-	TOKEN_PROMPT_POST
+	POST_TOKEN_PROMPT
 };
 
 typedef struct
@@ -82,7 +91,7 @@ typedef struct
 	time_t call_time;
 	time_t answer_time;
 	time_t end_time;
-	int ring_duration;
+	//int ring_duration;
 	int answer_duration;
 	int total_duration;
 	int callPatch_duration;
@@ -121,6 +130,7 @@ typedef struct {
 	int ConsentState;
 	int nextConsentState;
 	//int DTCounter;
+	int repeatCounter;
 	int levelNumber;
 	CDR_STATUS CDRStatus;
 	OBD_DIAL_PLAN DialPlanStatus;
@@ -190,9 +200,9 @@ private:
 	MYSQL* conn, *connBase, *connSelect, *connInsert, *connUpdate, *connPort, *connCallProc;
 	MYSQL_RES *res;
 	MYSQL_ROW row;
-	//int i;
 	void SetDiallingStartStopBtn(BOOL enableStart);
 public:
+	static const int MaxPromptsRepeatsCount;
 	WORD	nTotalCh;
 	int nIVRMinCh, nIVRMaxCh, tempIVRMinCh, nIVRMinChNew, nIVRMaxChNew;//, CGMaxCHNum;
 	int contestMinCh, contestMaxCh, tmpContestMinCh;

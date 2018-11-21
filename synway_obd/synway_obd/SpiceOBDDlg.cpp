@@ -56,6 +56,7 @@ END_MESSAGE_MAP()
 // CSpiceOBDDlg dialog
 
 
+const int CSpiceOBDDlg::MaxPromptsRepeatsCount = 3;
 
 CSpiceOBDDlg::CSpiceOBDDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_SYNWAY_OBD_DIALOG, pParent)
@@ -1901,14 +1902,17 @@ UINT CSpiceOBDDlg::SetChannelsStateCount(LPVOID  chCount)
 
 void CSpiceOBDDlg::GetDTMFandDNISBuffer(int ch)
 {
-	StrCpyA(ChInfo[ch].CDRStatus.dtmf2, SsmGetDtmfStrA(ch));
+	if (StrCmpA(ChInfo[ch].CDRStatus.dtmf2, "") == 0) //check if empty
+	{
+		StrCpyA(ChInfo[ch].CDRStatus.dtmf2, SsmGetDtmfStrA(ch));
+	}
 	SsmClearRxDtmfBuf(ch);
 	if (Campaigns.at(ChInfo[ch].CampaignID).enableSMSFlag && ((StrCmpA(ChInfo[ch].CDRStatus.dtmf2, "") == 0 && StrCmpA(ChInfo[ch].CDRStatus.DNIS, "")) ||
 		(Campaigns.at(ChInfo[ch].CampaignID).obdDialPlan == Informative && StrCmpA(ChInfo[ch].CDRStatus.reason, "Answered") == 0)))
 	{
 		ChInfo[ch].isApiToBeCalled = true;
 	}
-	if (StrCmpA(ChInfo[ch].CDRStatus.dtmf, "") || StrCmpA(ChInfo[ch].CDRStatus.dtmf2, ""))
+	if (StrCmpA(ChInfo[ch].CDRStatus.dtmf, "") || StrCmpA(ChInfo[ch].CDRStatus.dtmf2, "")) //if either 1st consent or patch dtmf not empty
 	{
 		StrCatA(ChInfo[ch].CDRStatus.dtmfBuf, ChInfo[ch].CDRStatus.dtmf);
 		StrCatA(ChInfo[ch].CDRStatus.dtmfBuf, "|");
@@ -1980,7 +1984,7 @@ void CSpiceOBDDlg::ContinuePlayingPrompts(int ch)
 		}
 		else
 		{
-			WORD wTimeOut = pnTime / 1000 + 5;
+			WORD wTimeOut = (WORD)(pnTime / 1000 + 5);
 			SsmSetWaitDtmf(ch, wTimeOut, 1, ' ', true); //set the DTMF termination character
 		}
 	}
@@ -2031,7 +2035,7 @@ void CSpiceOBDDlg::DialToIVR(int ch, BOOL isContest)
 	SsmClearRxDtmfBuf(ch);
 	ChInfo[ch].DtServiceState = USER_CALL_WAIT_PATCHUP;
 	//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-	if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1)*/ PlayMediaFile(ch, 200) == -1)
+	if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1)*/ PlayMediaFile(ch, CALLER_PROMPT) == -1)
 	{
 		LogErrorCodeAndMessage(ch);
 		HangupCall(ch);
@@ -2273,10 +2277,10 @@ void CSpiceOBDDlg::DoUserWork()
 					strncpy_s(ChInfo[i].pPhoNumBuf, ChInfo[i].pPhoNumBuf + 4, sizeof(ChInfo[i].pPhoNumBuf));
 				}
 				//logger.log(LOGINFO, "file to be played: %s", Campaigns.at(tempCampId).promptsPath[1]);
-				welcomePromptsNum = 100; //default value is 100
+				welcomePromptsNum = WELCOME_PROMPT; //default value is 100
 				aniNamePrompts = ""; //default empty
 				namePromptFound = false;
-				ChInfo[i].mediaPlaySubState = TOKEN_PROMPT_POST;
+				ChInfo[i].mediaPlaySubState = POST_TOKEN_PROMPT;
 				logger.log(LOGINFO, "First Prompt Name: %s and OBD_TYPE: %d", ChInfo[i].promptsName, ChInfo[i].obdType);
 				if (ChInfo[i].obdType == Informative && StrCmpA(ChInfo[i].promptsName, EMPTY_STRING))//check if Informative trigger OBD
 				{
@@ -2287,7 +2291,7 @@ void CSpiceOBDDlg::DoUserWork()
 				{
 					welcomePromptsNum = 0;
 					StrCpyA(ChInfo[i].promptsName, nameTunesPrev);
-					ChInfo[i].mediaPlaySubState = TOKEN_PROMPT_PREV;
+					ChInfo[i].mediaPlaySubState = PREV_TOKEN_PROMPT;
 				}
 				if (/*SsmPlayIndexString(i, CampID)*/ PlayMediaFile(i, welcomePromptsNum) == -1)
 				{
@@ -2307,7 +2311,7 @@ void CSpiceOBDDlg::DoUserWork()
 
 					if (ChInfo[i].DialPlanStatus != Informative)
 					{
-						ChInfo[i].ConsentState = 1;
+						ChInfo[i].ConsentState = USER_PLAY_PROMPT;
 						ChInfo[i].nextConsentState = USER_PLAYING_PROMPT;
 						ChInfo[i].levelNumber = 1;
 						ChInfo[i].DtServiceState = USER_PLAY_PRODUCT;
@@ -2315,12 +2319,17 @@ void CSpiceOBDDlg::DoUserWork()
 						In case of name prompts, set prompts_name for TOKEN_PROMPT_PLAYING sub state
 						**/
 						if (namePromptFound)	StrCpyA(ChInfo[i].promptsName, aniNamePrompts.c_str());
-						//int pnFormat; long pnTime;
-						//if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
-						//{
-						//	WORD  wTimeOut = pnTime / 1000 + 5;
-						//	SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
-						//}
+						if (ChInfo[i].DialPlanStatus == AcquisitionalOBDWith1stAnd2ndConsent)
+						{
+							ChInfo[i].repeatCounter = 1; //Initialize iteration counters...
+							ChInfo[i].ConsentState = USER_PLAYING_PROMPT;
+							int pnFormat; long pnTime;
+							if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+							{
+								WORD wTimeOut = (WORD)(pnTime / 1000 + 5);
+								SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
+							}
+						}
 					}
 				}
 				break;
@@ -2376,22 +2385,18 @@ void CSpiceOBDDlg::DoUserWork()
 			{
 			case AcquisitionalOBDWith1stAnd2ndConsent:
 				switch (ChInfo[i].ConsentState) {
-				case 1:
+				case USER_PLAYING_PROMPT:
 					ChInfo[i].mediaState = SsmCheckPlay(i);
 					//logger.log(LOGINFO, "Media state: %d, ph Number: %s", ChInfo[i].mediaState, ChInfo[i].pPhoNumBuf);
 					if (ChInfo[i].mediaState >= 0)
 					{
-						//StrCpyA(ChInfo[i].CDRStatus.dtmf, SsmGetDtmfStrA(i));
 						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
 						{
 							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
 							{
-								//SsmStopPlayIndex(i);
 								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = 3;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], -1, 0, -1) == -1)
+								if (PlayMediaFile(i, CALLER_PROMPT) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -2399,145 +2404,123 @@ void CSpiceOBDDlg::DoUserWork()
 								int pnFormat; long pnTime;
 								if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
 								{
-									WORD wTimeOut = pnTime / 1000 + 5;
-									//SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
-									SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true);
+									WORD wTimeOut = (WORD)(pnTime / 1000 + 5);
+									SsmSetWaitDtmf(i, wTimeOut, 6, '\0', false); //set the DTMF termination conditions
 								}
-								StrCpyA(ChInfo[i].CDRStatus.firstConsent, ChInfo[i].CDRStatus.dtmf); //copying correct input only.
+								ChInfo[i].ConsentState = USER_WAIT_SECOND_CONSENT;
+								//StrCpyA(ChInfo[i].CDRStatus.firstConsent, ChInfo[i].CDRStatus.dtmf); //copying correct input only.
 							}
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No Input
 							{
 								SsmStopPlay(i);
-								ChInfo[i].ConsentState = 2;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[2], -1, 0, -1) == -1)
+								if (++ChInfo[i].repeatCounter <= MaxPromptsRepeatsCount)
 								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
+									ChInfo[i].ConsentState = USER_PLAY_PROMPT;
+									ChInfo[i].nextConsentState = USER_PLAYING_PROMPT;
+									if (PlayMediaFile(i, NO_INPUT_PROMPT) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
 								}
-								int pnFormat; long pnTime;
-								if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+								else
 								{
-									WORD wTimeOut = pnTime / 1000 + 5;
-									//SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
-									SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true);
+									ChInfo[i].ConsentState = CALL_HANGUP;
+									if (PlayMediaFile(i, NO_INPUT_PROMPT) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
 								}
-								//SsmSetWaitDtmfExA(i, 18000, 1, "1", true);
 							}
 							else //Wrong input
 							{
 								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = 4;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
+								if (++ChInfo[i].repeatCounter <= MaxPromptsRepeatsCount)
 								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
+									ChInfo[i].ConsentState = USER_PLAY_PROMPT;
+									ChInfo[i].nextConsentState = USER_PLAYING_PROMPT;
+									if (PlayMediaFile(i, INVALID_PROMPT) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
 								}
-								//SsmSetWaitDtmfExA(i, 15000, 1, "1", true);
+								else
+								{
+									ChInfo[i].ConsentState = CALL_HANGUP;
+									if (PlayMediaFile(i, INVALID_PROMPT) == -1)
+									{
+										LogErrorCodeAndMessage(i);
+										HangupCall(i);
+									}
+								}
 							}
 						}
 					}
 					break;
-				case 2:
+				case USER_PLAY_PROMPT:
 					ChInfo[i].mediaState = SsmCheckPlay(i);
-					if (ChInfo[i].mediaState >= 0)
+					if (ChInfo[i].mediaState >= 1)
 					{
-						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf) >= 1)
+						SsmStopPlay(i);
+						SsmClearRxDtmfBuf(i);
+						if (PlayMediaFile(i, WELCOME_PROMPT) == -1)
 						{
-							if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "1") == 0) //Right Input
+							LogErrorCodeAndMessage(i);
+							HangupCall(i);
+						}
+						int pnFormat; long pnTime;
+						if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
+						{
+							logger.log(LOGINFO, "File length: %ld ", pnTime);
+							if (pnTime < 1000) //wav file is empty hangup call.
 							{
 								SsmStopPlay(i);
-								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = 3;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[3]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[3], -1, 0, -1) == -1)
-								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
-								}
-								int pnFormat; long pnTime;
-								if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
-								{
-									WORD wTimeOut = pnTime / 1000 + 5000;
-									//SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
-								}
-								//SsmSetWaitDtmfExA(i, 8000, 1, "9", true);
-								StrCpyA(ChInfo[i].CDRStatus.firstConsent, ChInfo[i].CDRStatus.dtmf); //copying correct input only.
-							}
-							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No input
-							{
-								SsmStopPlay(i);
-								ChInfo[i].ConsentState = 4;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
+								ChInfo[i].ConsentState = CALL_HANGUP;
+								if (PlayMediaFile(i, CALL_HANGUP_PROMPT) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
 								}
 							}
-							else //Wrong input
+							else
 							{
-								SsmStopPlay(i);
-								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = 4;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
-								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
-								}
+								ChInfo[i].ConsentState = ChInfo[i].nextConsentState;
+								WORD wTimeOut = (WORD)(pnTime / 1000 + 5);
+								SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
+
 							}
 						}
 					}
+					if (SsmGetChState(i) == S_CALL_PENDING)
+					{
+						HangupCall(i);
+					}
 					break;
-				case 3:
+				case USER_WAIT_SECOND_CONSENT:
 					ChInfo[i].mediaState = SsmCheckPlay(i);
-					if (ChInfo[i].mediaState >= 0)
+					if (ChInfo[i].mediaState >= 1)
 					{
 						if (SsmChkWaitDtmf(i, ChInfo[i].CDRStatus.dtmf2) >= 1)
 						{
-							if (StrCmpA(ChInfo[i].CDRStatus.dtmf2, "9") == 0) //Right Input
+							logger.log(LOGINFO, "pin-code captured: %s, ph Number: %s", ChInfo[i].CDRStatus.dtmf2, ChInfo[i].pPhoNumBuf);
+							SsmStopPlay(i);
+							ChInfo[i].ConsentState = CALL_HANGUP;
+							if (PlayMediaFile(i, CALL_HANGUP_PROMPT) == -1)
 							{
-								SsmStopPlay(i);
-								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = 4;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[5]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[5], -1, 0, -1) == -1)
-								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
-								}
-								StrCpyA(ChInfo[i].CDRStatus.secondConsent, ChInfo[i].CDRStatus.dtmf2); //copying correct input only.
-							}
-							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf2, "") == 0) //No input
-							{
-								SsmStopPlay(i);
-								ChInfo[i].ConsentState = 4;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
-								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
-								}
-							}
-							else //Wrong input
-							{
-								SsmStopPlay(i);
-								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = 4;
-								//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[4]);
-								if (/*SsmPlayIndexString(i, CampID)*/ SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[4], -1, 0, -1) == -1)
-								{
-									LogErrorCodeAndMessage(i);
-									HangupCall(i);
-								}
+								LogErrorCodeAndMessage(i);
+								HangupCall(i);
 							}
 						}
 					}
+					if (SsmGetChState(i) == S_CALL_PENDING)
+					{
+						HangupCall(i);
+					}
 					break;
-				case 4:
+				case CALL_HANGUP:
 					ChInfo[i].mediaState = SsmCheckPlay(i);
 					if (ChInfo[i].mediaState >= 1)
 					{
@@ -2696,8 +2679,8 @@ void CSpiceOBDDlg::DoUserWork()
 												SsmStopPlay(i);
 												ChInfo[i].DtServiceState = USER_PLAY_PRODUCT;
 												ChInfo[i].levelNumber = invalidKeyLevel;
-												int invalidKeyPrompt = 300;
-												if (invalidKeyLevel >= 100 && invalidKeyLevel < 200)
+												int invalidKeyPrompt = INVALID_PROMPT;
+												if (invalidKeyLevel >= WELCOME_PROMPT && invalidKeyLevel < CALLER_PROMPT)
 												{
 													invalidKeyPrompt = invalidKeyLevel;
 												}
@@ -2756,8 +2739,8 @@ void CSpiceOBDDlg::DoUserWork()
 									ChInfo[i].DtServiceState = USER_PLAY_PRODUCT;
 									ChInfo[i].levelNumber = noKeyLevel;
 
-									int noKeyPrompt = 400;
-									if (noKeyLevel >= 100 && noKeyLevel < 200)
+									int noKeyPrompt = NO_INPUT_PROMPT;
+									if (noKeyLevel >= WELCOME_PROMPT && noKeyLevel < CALLER_PROMPT)
 									{
 										noKeyPrompt = noKeyLevel;
 									}
@@ -2867,7 +2850,7 @@ void CSpiceOBDDlg::DoUserWork()
 							LogErrorCodeAndMessage(i);
 							HangupCall(i);
 						}
-						if (ChInfo[i].levelNumber >= 100 && ChInfo[i].levelNumber < 200)
+						if (ChInfo[i].levelNumber >= WELCOME_PROMPT && ChInfo[i].levelNumber < CALLER_PROMPT)
 						{
 							ChInfo[i].DtServiceState = USER_PLAY_PRODUCT;
 						}
@@ -2876,7 +2859,7 @@ void CSpiceOBDDlg::DoUserWork()
 							int pnFormat; long pnTime;
 							if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
 							{
-								WORD wTimeOut = pnTime / 1000 + 5;
+								WORD wTimeOut = (WORD)(pnTime / 1000 + 5);
 								SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
 							}
 						}
@@ -2907,7 +2890,7 @@ void CSpiceOBDDlg::DoUserWork()
 					{
 						switch (ChInfo[i].mediaPlaySubState)
 						{
-						case TOKEN_PROMPT_PREV:
+						case PREV_TOKEN_PROMPT:
 							if (PlayMediaFile(i, 0) == -1) //prompts name set already
 							{
 								LogErrorCodeAndMessage(i);
@@ -2922,9 +2905,9 @@ void CSpiceOBDDlg::DoUserWork()
 								LogErrorCodeAndMessage(i);
 								HangupCall(i);
 							}
-							ChInfo[i].mediaPlaySubState = TOKEN_PROMPT_POST;
+							ChInfo[i].mediaPlaySubState = POST_TOKEN_PROMPT;
 							break;
-						case TOKEN_PROMPT_POST:
+						case POST_TOKEN_PROMPT:
 							//Fetch no input repeat level value.
 							//char songQuery[1024],
 							char levelType[10];
@@ -2938,7 +2921,7 @@ void CSpiceOBDDlg::DoUserWork()
 							}
 							//mysql_free_result(resPromo);
 
-							if (ChInfo[i].levelNumber >= 100 && ChInfo[i].levelNumber < 200)
+							if (ChInfo[i].levelNumber >= WELCOME_PROMPT && ChInfo[i].levelNumber < CALLER_PROMPT)
 							{
 								ChInfo[i].levelNumber = noKeyLevel;
 							}
@@ -2954,12 +2937,12 @@ void CSpiceOBDDlg::DoUserWork()
 							if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
 							{
 								logger.log(LOGINFO, "File length: %ld ", pnTime);
-								if (pnTime < 1000 || ChInfo[i].levelNumber == 500) //wav file is empty hangup call.
+								if (pnTime < 1000 || ChInfo[i].levelNumber == CALL_HANGUP_PROMPT) //wav file is empty hangup call.
 								{
 									SsmStopPlay(i);
 									ChInfo[i].DtServiceState = USER_STOP_PLAYING;
 									//sprintf_s(CampID, "%d", Campaigns.at(tempCampId).loadedIndex[2]);
-									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[5], -1, 0, -1)*/ PlayMediaFile(i, 500) == -1)
+									if (/*SsmPlayIndexString(i, CampID) SsmPlayFile(i, Campaigns.at(tempCampId).promptsPath[5], -1, 0, -1)*/ PlayMediaFile(i, CALL_HANGUP_PROMPT) == -1)
 									{
 										LogErrorCodeAndMessage(i);
 										HangupCall(i);
@@ -2971,11 +2954,11 @@ void CSpiceOBDDlg::DoUserWork()
 									WORD wTimeOut;
 									if (StrCmpIA(levelType, "skip") == 0) //check for skip first dtmf
 									{
-										wTimeOut = pnTime / 1000;
+										wTimeOut = (WORD)(pnTime / 1000);
 									}
 									else
 									{
-										wTimeOut = pnTime / 1000 + 5;
+										wTimeOut = (WORD)(pnTime / 1000 + 5);
 									}
 									SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
 								}
@@ -3022,8 +3005,8 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = USER_STOP_PROMPT;
-								if (PlayMediaFile(i, 500) == -1)
+								ChInfo[i].ConsentState = CALL_HANGUP;
+								if (PlayMediaFile(i, CALL_HANGUP_PROMPT) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -3035,7 +3018,7 @@ void CSpiceOBDDlg::DoUserWork()
 								SsmStopPlay(i);
 								ChInfo[i].ConsentState = USER_PLAY_PROMPT;
 								ChInfo[i].nextConsentState = USER_REPEAT_PROMPT;
-								if (PlayMediaFile(i, 400) == -1)
+								if (PlayMediaFile(i, NO_INPUT_PROMPT) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -3048,7 +3031,7 @@ void CSpiceOBDDlg::DoUserWork()
 								ChInfo[i].ConsentState = USER_PLAY_PROMPT;
 								ChInfo[i].nextConsentState = USER_REPEAT_PROMPT;
 
-								if (PlayMediaFile(i, 300) == -1)
+								if (PlayMediaFile(i, INVALID_PROMPT) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -3067,8 +3050,8 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = USER_STOP_PROMPT;
-								if (PlayMediaFile(i, 500) == -1)
+								ChInfo[i].ConsentState = CALL_HANGUP;
+								if (PlayMediaFile(i, CALL_HANGUP_PROMPT) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -3078,8 +3061,8 @@ void CSpiceOBDDlg::DoUserWork()
 							else if (StrCmpA(ChInfo[i].CDRStatus.dtmf, "") == 0) //No input
 							{
 								SsmStopPlay(i);
-								ChInfo[i].ConsentState = USER_STOP_PROMPT;
-								if (PlayMediaFile(i, 500) == -1)
+								ChInfo[i].ConsentState = CALL_HANGUP;
+								if (PlayMediaFile(i, CALL_HANGUP_PROMPT) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -3089,8 +3072,8 @@ void CSpiceOBDDlg::DoUserWork()
 							{
 								SsmStopPlay(i);
 								SsmClearRxDtmfBuf(i);
-								ChInfo[i].ConsentState = USER_STOP_PROMPT;
-								if (PlayMediaFile(i, 500) == -1)
+								ChInfo[i].ConsentState = CALL_HANGUP;
+								if (PlayMediaFile(i, CALL_HANGUP_PROMPT) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -3117,8 +3100,8 @@ void CSpiceOBDDlg::DoUserWork()
 							if (pnTime < 1000) //wav file is empty hangup call.
 							{
 								SsmStopPlay(i);
-								ChInfo[i].ConsentState = USER_STOP_PROMPT;
-								if (PlayMediaFile(i, 500) == -1)
+								ChInfo[i].ConsentState = CALL_HANGUP;
+								if (PlayMediaFile(i, CALL_HANGUP_PROMPT) == -1)
 								{
 									LogErrorCodeAndMessage(i);
 									HangupCall(i);
@@ -3127,7 +3110,7 @@ void CSpiceOBDDlg::DoUserWork()
 							else
 							{
 								ChInfo[i].ConsentState = ChInfo[i].nextConsentState;
-								WORD wTimeOut = pnTime / 1000 + 5;
+								WORD wTimeOut = (WORD)(pnTime / 1000 + 5);
 								SsmSetWaitDtmf(i, wTimeOut, 1, ' ', true); //set the DTMF termination character
 							}
 						}
@@ -3137,7 +3120,7 @@ void CSpiceOBDDlg::DoUserWork()
 						HangupCall(i);
 					}
 					break;
-				case USER_STOP_PROMPT:
+				case CALL_HANGUP:
 					ChInfo[i].mediaState = SsmCheckPlay(i);
 					if (ChInfo[i].mediaState >= 1)
 					{
