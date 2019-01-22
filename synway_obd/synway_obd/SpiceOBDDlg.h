@@ -17,6 +17,7 @@
 
 #define DEFAULT_LANG_CODE "10"
 #define EMPTY_STRING ""
+#define CHK_FILE_LIST 3
 
 using namespace std;
 
@@ -135,6 +136,7 @@ typedef struct {
 	CDR_STATUS CDRStatus;
 	OBD_DIAL_PLAN DialPlanStatus;
 	int obdType;
+	vector<std::string> songCodes;
 	// user channel  vars
 	APP_USER_STATE	nStep;
 	int mediaState;
@@ -151,6 +153,7 @@ typedef struct
 	char encryptedAni[31];
 	int priority;
 	int obdType;
+	vector<std::string> promoCodes; //to add
 }pnNumWithEncryptedAni;
 
 typedef struct
@@ -301,6 +304,9 @@ public:
 	char* GetReleaseErrorReason(WORD code);
 	void HangupCall(int ch);
 	void HangupIVRCall(int ch);
+	void ParseSongCodes(vector<std::string>& , std::string);
+	void PreparePatchDNIS(int ch, char * songCode);
+	int AddToFileList(int ch, char * tmpMediaPath, char * tmpMediaFile);
 	CSpiceOBDDlg(CWnd* pParent = NULL);	// standard constructor
 
 										// Dialog Data

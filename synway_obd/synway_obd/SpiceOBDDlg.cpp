@@ -548,6 +548,22 @@ void CSpiceOBDDlg::GetSongsMasterData(char* campaignId, size_t campaignKey)
 	mysql_free_result(resPromo);
 }
 
+void CSpiceOBDDlg::ParseSongCodes(vector<std::string> & songCodesList, std::string commaSeperatedSongCodes)
+{
+	char * context;
+	char * tempArr;
+	std::vector<std::string>().swap(songCodesList); //To clear all previous contents
+
+	//parsing and pushing song codes in vector
+	tempArr = strtok_s(const_cast<char*>(commaSeperatedSongCodes.c_str()), ",", &context);
+	while (tempArr)
+	{
+		songCodesList.push_back(tempArr);
+		tempArr = strtok_s(NULL, ",", &context);
+	}
+	logger.log(LOGINFO, "songCodesList size: %d", songCodesList.size());
+}
+
 
 BOOL CSpiceOBDDlg::GetDBData()
 {
@@ -719,7 +735,7 @@ BOOL CSpiceOBDDlg::GetDBData()
 			{
 				GetSongsMasterData(row[0], campKey);
 				//Get out dialer numbers 5 times to the allocated channel numbers to the campaign
-				sprintf_s(queryStr, "select ani, priority, prompts_name, obd_type from tbl_outdialer_base \
+				sprintf_s(queryStr, "select ani, priority, prompts_name, obd_type, song_codes from tbl_outdialer_base \
 				where date(insert_date_time) = date(now()) and campaign_id = '%s' and status = %d order by priority,insert_date_time limit %d",
 					row[0], 0, (5 * Campaigns.at(campKey).channelsAllocated));
 
@@ -746,6 +762,12 @@ BOOL CSpiceOBDDlg::GetDBData()
 					Campaigns.at(campKey).phnumBuf.push_back({/* DecryptedVal,*/"", "", atoi(rowPhBuf[1]), atoi(rowPhBuf[3]) });
 					StrCpyA(Campaigns.at(campKey).phnumBuf.at(curIndex).encryptedAni, rowPhBuf[0]);
 					StrCpyA(Campaigns.at(campKey).phnumBuf.at(curIndex).promptsName, rowPhBuf[2]);
+					if (StrCmpA(rowPhBuf[4], "")) //check if this column is not empty
+					{
+						logger.log(LOGINFO, "ParseSongCodes called rowPhBuf: %s", rowPhBuf[4]);
+						ParseSongCodes(Campaigns.at(campKey).phnumBuf.at(curIndex).promoCodes, rowPhBuf[4]);
+						logger.log(LOGINFO, "ParseSongCodes called song code list size: %d", Campaigns.at(campKey).phnumBuf.at(curIndex).promoCodes.size());
+					}
 					isCampaignCompleted = false;
 				}
 				mysql_free_result(resPhBuf);
@@ -1278,6 +1300,7 @@ void CSpiceOBDDlg::UpdateStatusAndPickNextRecords()
 			StrCpyA(ChInfo[i].promptsName, EMPTY_STRING);
 			StrCpyA(ChInfo[i].pPhoNumBuf, EMPTY_STRING);
 			StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, EMPTY_STRING);
+			std::vector<std::string>().swap(ChInfo[i].songCodes);
 			ChInfo[i].isAvailable = true;
 		}
 	}//For loop
@@ -1691,6 +1714,10 @@ void CSpiceOBDDlg::HangupCall(int ch)
 			}
 		}
 		SsmClearRxDtmfBuf(ch);
+		if (!ChInfo[ch].songCodes.empty()) //check whether file list is playing
+		{
+			SsmClearFileList(ch);
+		}
 		SsmStopPlay(ch);
 		SsmHangup(ch);
 		ChInfo[ch].EnCalled = true;
@@ -1929,25 +1956,80 @@ void CSpiceOBDDlg::GetDTMFandDNISBuffer(int ch)
 	}
 }
 
+int CSpiceOBDDlg::AddToFileList(int ch, char * tmpMediaPath, char * tmpMediaFile)
+{
+	StrCatA(tmpMediaPath, tmpMediaFile);
+	if (PathFileExistsA(tmpMediaPath))
+	{
+		//tmpMediaPath = "E:/OBD/PROMPTS/20190122/rj_idea/rj_idea-RJ4DT-811520190122121901/H/100.wav";
+		//to test functionality of SsmAddToFileList(Amit Kumar Gupta)
+		if (SsmAddToFileList(ch, tmpMediaPath, 1, 0, 32768) == -1)
+		{
+			logger.log(LOGERR, "%s ssmaddtofilelist failed", tmpMediaPath);
+			return -1;
+		}
+		else
+		{
+			logger.log(LOGERR, "%s ssmaddtofilelist pass", tmpMediaPath);
+			return 0;
+		}
+		//CString promptName(tmpMediaFile);
+		//m_TrkChList.SetItemText(ch, 5, promptName);
+	}
+	else
+	{
+		CString promptsFileName(tmpMediaFile);
+		logger.log(LOGERR, "%s file missing on path", tmpMediaPath);
+		promptsFileName.Append(_T(" Prompt Missing!!!"));
+		AfxMessageBox(promptsFileName);
+		OnBnClickedDiallingStop();
+	}
+}
+
 int CSpiceOBDDlg::PlayMediaFile(int ch, int promptsNumber)
 {
 	char tmpMediaFile[31], tmpMediaPath[100];
 	StrCpyA(tmpMediaPath, Campaigns.at(ChInfo[ch].CampaignID).promptsDirectory);
-
 	if (promptsNumber)
 	{
-		sprintf_s(tmpMediaFile, "%d.wav", promptsNumber);
+		//to test functionality of SsmPlayFileList(Amit Kumar Gupta)
+		if (!ChInfo[ch].songCodes.empty() && !(promptsNumber >= 100 && promptsNumber <= 500)) //if song codes are provided with base
+		{
+			for (size_t i = 0; i < ChInfo[ch].songCodes.size(); i++)
+			{
+				//Adding songs by their song codes ex. songcode.wav
+				StrCpyA(tmpMediaPath, Campaigns.at(ChInfo[ch].CampaignID).promptsDirectory);
+				sprintf_s(tmpMediaFile, "%s.wav", ChInfo[ch].songCodes.at(i).c_str());
+				AddToFileList(ch, tmpMediaPath, tmpMediaFile);
+
+				//Adding keys to be pressed by user ex. 1.wav
+				StrCpyA(tmpMediaPath, Campaigns.at(ChInfo[ch].CampaignID).promptsDirectory);
+				sprintf_s(tmpMediaFile, "%d.wav", i);
+				AddToFileList(ch, tmpMediaPath, tmpMediaFile);
+			}
+			logger.log(LOGINFO, "SsmPlayFileList called on channel: %d", ch);
+			if (SsmPlayFileList(ch) == -1) //To play the list of files
+			{
+				logger.log(LOGINFO, "SsmPlayFileList failed on channel: %d", ch);
+				return -1;
+			}
+
+			return 0; // return 1 when songs list is playing successfully.
+		}
+		else
+		{
+			sprintf_s(tmpMediaFile, "%d.wav", promptsNumber);
+		}
 	}
 	else
 	{
 		sprintf_s(tmpMediaFile, "%s.wav", ChInfo[ch].promptsName);
 	}
-
 	StrCatA(tmpMediaPath, tmpMediaFile);
 
 	logger.log(LOGINFO, "Media file Path to be played: %s", tmpMediaPath);
 
-	if (PathFileExistsA(tmpMediaPath))
+	if (PathFileExistsA(tmpMediaPath)) //if prompts exist
 	{
 		if (SsmPlayFile(ch, tmpMediaPath, -1, 0, -1) == -1)
 		{
@@ -1956,7 +2038,7 @@ int CSpiceOBDDlg::PlayMediaFile(int ch, int promptsNumber)
 		CString promptName(tmpMediaFile);
 		m_TrkChList.SetItemText(ch, 5, promptName);
 	}
-	else
+	else //if prompts is missing
 	{
 		CString promptsFileName(tmpMediaFile);
 		logger.log(LOGERR, "%s file missing on path", tmpMediaPath);
@@ -2087,6 +2169,76 @@ void CSpiceOBDDlg::DialToIVR(int ch, BOOL isContest)
 	logger.log(LOGINFO, "CLI to IVR: %s, DNIS: %s", ChInfo[ch].pPhoNumBuf, ChInfo[ch].CDRStatus.DNIS);
 }
 
+
+void CSpiceOBDDlg::PreparePatchDNIS(int ch, char * songCode)
+{
+	char patchDNIS[31], levelType[10];
+	size_t songCodeSize = 16;
+	StrCpyA(patchDNIS, "");
+	StrCpyA(levelType, "");
+	StrCpyA(levelType, Campaigns.at(ChInfo[ch].CampaignID).tblSongsMaster[ChInfo[ch].levelNumber].levelType);
+	std::string tmpDNIS = Campaigns.at(ChInfo[ch].CampaignID).tblSongsMaster[ChInfo[ch].levelNumber].patchDnis;
+	std::string tmpLangCode = Campaigns.at(ChInfo[ch].CampaignID).tblSongsMaster[ChInfo[ch].levelNumber].dtmfWiseData[ChInfo[ch].CDRStatus.dtmf].langCode;
+	if (tmpLangCode.compare(DEFAULT_LANG_CODE)) //check for default lang code.
+	{
+		tmpDNIS.replace(4, tmpLangCode.length(), tmpLangCode);
+	}
+	std::string tmpDTMF = "X";
+	_strupr_s(levelType);
+	if (std::string(levelType).substr(0, 2).compare("DT") == 0)//Find if level type is DT
+	{
+		if (!ChInfo[ch].songCodes.empty())//if DT songs are in 10 files and varies with MSISDN
+		{
+			SsmClearFileList(ch);
+			sprintf_s(songCode, songCodeSize, "%s%07s", std::string(levelType).substr(3, std::string::npos).c_str(),
+				ChInfo[ch].songCodes[atoi(ChInfo[ch].CDRStatus.dtmf)].c_str());
+			logger.log(LOGINFO, "key pressed as dtmf: %s , Song code selected: %s", ChInfo[ch].CDRStatus.dtmf, songCode);
+			std::vector<std::string>().swap(ChInfo[ch].songCodes);
+		}
+		else
+		{
+			sprintf_s(songCode, songCodeSize, "%s%07s", std::string(levelType).substr(3, std::string::npos).c_str(),
+				Campaigns.at(ChInfo[ch].CampaignID).tblSongsMaster[ChInfo[ch].levelNumber].dtmfWiseData[ChInfo[ch].CDRStatus.dtmf].dtmfPromoCode.c_str());
+			StrCpyA(ChInfo[ch].CDRStatus.songName,
+				Campaigns.at(ChInfo[ch].CampaignID).tblSongsMaster[ChInfo[ch].levelNumber].dtmfWiseData[ChInfo[ch].CDRStatus.dtmf].dtmfPromoCode.c_str()); //copying song code for MIS instead of song name.
+		}
+		tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+		StrCpyA(patchDNIS, tmpDNIS.c_str());
+		//StrCatA(patchDNIS, ChInfo[ch].CDRStatus.dtmf);
+		//Changes made to acomodate in case of * and # are part of dtmf in DT songs
+		if (!StrCmpA(ChInfo[ch].CDRStatus.dtmf, "*")) //check if *
+		{
+			StrCatA(patchDNIS, "1");
+		}
+		else if (!StrCmpA(ChInfo[ch].CDRStatus.dtmf, "#")) // check if #
+		{
+			StrCatA(patchDNIS, "2");
+		}
+		else //for all 0-9
+		{
+			StrCatA(patchDNIS, ChInfo[ch].CDRStatus.dtmf);
+		}
+	}
+	else if (StrCmpIA(levelType, "SERVICE") == 0)
+	{
+		sprintf_s(songCode, songCodeSize, "%04s",
+			Campaigns.at(ChInfo[ch].CampaignID).tblSongsMaster[ChInfo[ch].levelNumber].dtmfWiseData[ChInfo[ch].CDRStatus.dtmf].dtmfPromoCode.c_str());
+		tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
+		StrCpyA(patchDNIS, tmpDNIS.c_str());
+		//StrCatA(patchDNIS, ChInfo[ch].CDRStatus.dtmf);
+		StrCatA(patchDNIS, Campaigns.at(ChInfo[ch].CampaignID).first_consent_digit);
+	}
+	else
+	{
+		sprintf_s(songCode, songCodeSize, "%04s",
+			Campaigns.at(ChInfo[ch].CampaignID).tblSongsMaster[ChInfo[ch].levelNumber].dtmfWiseData[ChInfo[ch].CDRStatus.dtmf].dtmfPromoCode.c_str());
+		StrCpyA(patchDNIS, "");
+	}
+	StrCatA(patchDNIS, songCode);
+	StrCpyA(ChInfo[ch].CDRStatus.DNIS, patchDNIS);
+	logger.log(LOGINFO, "Patch DNIS is: %s", patchDNIS);
+}
+
 void CSpiceOBDDlg::DoUserWork()
 {
 	int nResult, nDirection;
@@ -2163,6 +2315,11 @@ void CSpiceOBDDlg::DoUserWork()
 						StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, tmpEncryptedAni);
 						StrCpyA(ChInfo[i].promptsName, Campaigns.at(tempCampId).phnumBuf.front().promptsName);
 						ChInfo[i].obdType = Campaigns.at(tempCampId).phnumBuf.front().obdType;
+						if (!Campaigns.at(tempCampId).phnumBuf.front().promoCodes.empty()) //if promoCodes vector is not empty
+						{
+							ChInfo[i].songCodes.swap(Campaigns.at(tempCampId).phnumBuf.front().promoCodes); //coping data to channel structure
+						}
+
 						//delete Campaigns.at(tempCampId).phnumBuf.front().ani;
 						if (StrCmpA(ChInfo[i].promptsName, EMPTY_STRING))
 						{
@@ -2211,6 +2368,7 @@ void CSpiceOBDDlg::DoUserWork()
 						StrCpyA(ChInfo[i].pPhoNumBuf, EMPTY_STRING);
 						StrCpyA(ChInfo[i].promptsName, EMPTY_STRING);
 						StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, EMPTY_STRING);
+						std::vector<std::string>().swap(ChInfo[i].songCodes);
 						ChInfo[i].obdType = 0;
 						m_TrkChList.SetItemText(i, 1, L"");
 						m_TrkChList.SetItemText(i, 3, L"");
@@ -2546,7 +2704,7 @@ void CSpiceOBDDlg::DoUserWork()
 								ChInfo[i].isApiToBeCalled = false; //Reset flag if first call is disconnected only.
 																   //Get song details
 																   /*char songQuery[1024],songName[50]*/
-								char songCode[20], levelType[10], patchDNIS[31];
+								char songCode[20], levelType[10];// patchDNIS[31];
 								int  jumpLevel;
 
 								/*sprintf_s(songQuery, "select song_name, promo_code, level_type, getSecondDnis('%s') as DNIS, cg_level from tbl_songs_master where campaign_id = '%s' and dtmf = '%s' and repeat_level = %d",
@@ -2566,7 +2724,7 @@ void CSpiceOBDDlg::DoUserWork()
 								StrCpyA(songName, "");*/
 								StrCpyA(songCode, "");
 								StrCpyA(levelType, "");
-								StrCpyA(patchDNIS, "");
+								//StrCpyA(patchDNIS, "");
 								jumpLevel = -1;
 								/*if ((rowPromo = mysql_fetch_row(resPromo)) != NULL)
 								{*/
@@ -2578,55 +2736,7 @@ void CSpiceOBDDlg::DoUserWork()
 									{
 										jumpLevel = atoi(Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].cgLevel);
 
-										std::string tmpDNIS = Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].patchDnis;
-										std::string tmpLangCode = Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData[ChInfo[i].CDRStatus.dtmf].langCode;
-										if (tmpLangCode.compare(DEFAULT_LANG_CODE)) //check for default lang code.
-										{
-											tmpDNIS.replace(4, tmpLangCode.length(), tmpLangCode);
-										}
-										std::string tmpDTMF = "X";
-										_strupr_s(levelType);
-										if (std::string(levelType).substr(0, 2).compare("DT") == 0)//Find if level type is DT
-										{
-											sprintf_s(songCode, "%s%07s", std::string(levelType).substr(3, std::string::npos).c_str(),
-												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData[ChInfo[i].CDRStatus.dtmf].dtmfPromoCode.c_str());
-											StrCpyA(ChInfo[i].CDRStatus.songName,
-												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData[ChInfo[i].CDRStatus.dtmf].dtmfPromoCode.c_str()); //copying song code for MIS instead of song name.
-
-											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
-											StrCpyA(patchDNIS, tmpDNIS.c_str());
-											//StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
-											//Changes made to acomodate in case of * and # are part of dtmf in DT songs
-											if (!StrCmpA(ChInfo[i].CDRStatus.dtmf, "*")) //check if *
-											{
-												StrCatA(patchDNIS, "1");
-											}
-											else if (!StrCmpA(ChInfo[i].CDRStatus.dtmf, "#")) // check if #
-											{
-												StrCatA(patchDNIS, "2");
-											}
-											else //for all 0-9
-											{
-												StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
-											}
-										}
-										else if (StrCmpIA(levelType, "SERVICE") == 0)
-										{
-											sprintf_s(songCode, "%04s",
-												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData[ChInfo[i].CDRStatus.dtmf].dtmfPromoCode.c_str());
-											tmpDNIS.erase(tmpDNIS.find(tmpDTMF), std::string::npos);
-											StrCpyA(patchDNIS, tmpDNIS.c_str());
-											//StrCatA(patchDNIS, ChInfo[i].CDRStatus.dtmf);
-											StrCatA(patchDNIS, Campaigns.at(tempCampId).first_consent_digit);
-										}
-										else
-										{
-											sprintf_s(songCode, "%04s",
-												Campaigns.at(ChInfo[i].CampaignID).tblSongsMaster[ChInfo[i].levelNumber].dtmfWiseData[ChInfo[i].CDRStatus.dtmf].dtmfPromoCode.c_str());
-											StrCpyA(patchDNIS, "");
-										}
-										StrCatA(patchDNIS, songCode);
-										StrCpyA(ChInfo[i].CDRStatus.DNIS, patchDNIS);
+										PreparePatchDNIS(i, songCode);
 
 										if (StrCmpIA(levelType, "skip") == 0) //check for skip first dtmf
 										{
@@ -2937,7 +3047,7 @@ void CSpiceOBDDlg::DoUserWork()
 							if (SsmGetPlayingFileInfo(i, &pnFormat, &pnTime) == 0)
 							{
 								logger.log(LOGINFO, "File length: %ld ", pnTime);
-								if (pnTime < 1000 || ChInfo[i].levelNumber == CALL_HANGUP_PROMPT) //wav file is empty hangup call.
+								if (SsmGetPlayType(i) != CHK_FILE_LIST && (pnTime < 1000 || ChInfo[i].levelNumber == CALL_HANGUP_PROMPT)) //wav file is empty hangup call.
 								{
 									SsmStopPlay(i);
 									ChInfo[i].DtServiceState = USER_STOP_PLAYING;
@@ -3523,6 +3633,7 @@ BOOL CSpiceOBDDlg::InitializeChannels()
 					StrCpyA(ChInfo[i].pPhoNumBuf, EMPTY_STRING);
 					StrCpyA(ChInfo[i].promptsName, EMPTY_STRING);
 					StrCpyA(ChInfo[i].CDRStatus.encrypted_ani, EMPTY_STRING);
+					std::vector<std::string>().swap(ChInfo[i].songCodes);
 					StrCpyA(ChInfo[i].CDRStatus.dtmf, EMPTY_STRING);
 					StrCpyA(ChInfo[i].CDRStatus.dtmf2, EMPTY_STRING);
 					StrCpyA(ChInfo[i].CDRStatus.dtmfBuf, EMPTY_STRING);
